@@ -8,8 +8,10 @@ class SearchService extends Service {
     this.limit = this.config.list_topic_count;
   }
 
-  /*
+  /**
    * 根据关键字查询本地数据库
+   * @param query
+   * @param keyword
    */
   async searchLocal(query, keyword) {
     const { tab } = query;
@@ -44,16 +46,19 @@ class SearchService extends Service {
   }
 
   queryFactory(keyword, searchKey, page) {
-    const opt = { skip: (page - 1) * this.limit, limit: this.limit, sort: '-create_at' };
+    const s = this.app.Sequelize;
+    const { substring } = s.Op;
+    const opt = { offset: (page - 1) * this.limit, limit: this.limit, order: [[ 'createdAt', 'DESC' ]] };
     return [
-      { [searchKey]: { $regex: new RegExp(keyword, 'i') } },
+      { [searchKey]: { [substring]: keyword } },
       opt,
     ];
   }
 
-  /*
+  /**
    * 根据关键字查找用户列表
    * @param {String} keyword 关键字, {Number} page 第几页
+   * @param page
    * @return {Promise[data, count]} 承载用户列表, 查询总数的 Promise 对象
    */
   searchUser(keyword, page) {
@@ -64,9 +69,10 @@ class SearchService extends Service {
     ]);
   }
 
-  /*
+  /**
    * 根据关键字查找帖子列表
    * @param {String} keyword 关键字, {Number} page 第几页
+   * @param page
    * @return {Promise[data, count]} 承载帖子列表, 查询总数的 Promise 对象
    */
   searchTopic(keyword, page) {
@@ -77,9 +83,10 @@ class SearchService extends Service {
     ]);
   }
 
-  /*
+  /**
    * 根据关键字查找用户和帖子列表
    * @param {String} keyword 关键字, {Number} page 第几页
+   * @param page
    * @return {Promise[data, count]} 承载用户列表, 帖子列表的 Promise 对象
    */
   searchUserAndTopic(keyword, page) {

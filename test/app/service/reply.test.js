@@ -21,14 +21,14 @@ describe('test/app/service/reply.test.js', () => {
     const topic_title = 'test';
     const topic_content = 'unit test';
     const tab = 'share';
-    topic = await ctx.service.topic.newAndSave(topic_title, topic_content, tab, user._id);
+    topic = await ctx.service.topic.newAndSave(topic_title, topic_content, tab, user.loginname);
 
     assert(topic.title === topic_title);
     assert(topic.content === topic_content);
     assert(topic.tab === tab);
 
     const reply_content = 'unit test reply';
-    reply = await ctx.service.reply.newAndSave(reply_content, topic._id, user._id);
+    reply = await ctx.service.reply.newAndSave(reply_content, topic.id, user.loginname);
 
     assert(reply.content === reply_content);
   });
@@ -37,24 +37,16 @@ describe('test/app/service/reply.test.js', () => {
     // 创建 ctx
     const ctx = app.mockContext();
 
-    const test_reply = await ctx.service.reply.getReply(reply._id);
-    assert(test_reply.content === reply.content);
-  });
-
-  it('getReplyById should ok', async function() {
-    // 创建 ctx
-    const ctx = app.mockContext();
-
-    let test_reply = await ctx.service.reply.getReplyById(reply._id);
+    let test_reply = await ctx.service.reply.getReply(reply.id);
     assert(test_reply.content === reply.content);
 
-    test_reply = await ctx.service.reply.getReplyById();
+    test_reply = await ctx.service.reply.getReply();
     assert(test_reply === null);
 
-    test_reply = await ctx.service.reply.getReplyById('');
+    test_reply = await ctx.service.reply.getReply('');
     assert(test_reply === null);
 
-    test_reply = await ctx.service.reply.getReplyById('565c4473d0bc14ae279399fe');
+    test_reply = await ctx.service.reply.getReply('565c4473d0bc14ae279399fe');
     assert(test_reply === null);
   });
 
@@ -62,7 +54,7 @@ describe('test/app/service/reply.test.js', () => {
     // 创建 ctx
     const ctx = app.mockContext();
 
-    let replies = await ctx.service.reply.getRepliesByTopicId(topic._id);
+    let replies = await ctx.service.reply.getRepliesByTopicId(topic.id);
     assert(replies.length === 1);
     assert(replies[0].content === reply.content);
 
@@ -80,31 +72,31 @@ describe('test/app/service/reply.test.js', () => {
     const topic_title = 'test1';
     const topic_content = 'unit test1';
     const tab = 'share';
-    const test_topic = await ctx.service.topic.newAndSave(topic_title, topic_content, tab, user._id);
+    const test_topic = await ctx.service.topic.newAndSave(topic_title, topic_content, tab, user.loginname);
 
     assert(test_topic.title === topic_title);
 
     const reply_content = 'unit test reply';
-    const test_reply1 = await ctx.service.reply.newAndSave(reply_content, test_topic._id, user._id);
-    const test_reply2 = await ctx.service.reply.newAndSave(reply_content, test_topic._id, user._id, reply._id);
+    const test_reply1 = await ctx.service.reply.newAndSave(reply_content, test_topic.id, user.loginname);
+    const test_reply2 = await ctx.service.reply.newAndSave(reply_content, test_topic.id, user.loginname, reply.id);
     assert(test_reply1.content === reply_content);
-    assert(test_reply2.reply_id.toString() === reply._id.toString());
+    assert(test_reply2.reply_id.toString() === reply.id.toString());
   });
 
   it('getLastReplyByTopId should ok', async function() {
     // 创建 ctx
     const ctx = app.mockContext();
 
-    const last_reply = await ctx.service.reply.getLastReplyByTopId(topic._id);
+    const last_reply = await ctx.service.reply.getLastReplyByTopId(topic.id);
 
-    assert(last_reply._id.toString() === reply._id.toString());
+    assert(last_reply.id.toString() === reply.id.toString());
   });
 
   it('getRepliesByAuthorId should ok', async function() {
     // 创建 ctx
     const ctx = app.mockContext();
 
-    const test_replies = await ctx.service.reply.getRepliesByAuthorId(user._id);
+    const test_replies = await ctx.service.reply.getRepliesByAuthorId(user.loginname);
     assert(test_replies[1].content === reply.content);
   });
 
@@ -112,7 +104,7 @@ describe('test/app/service/reply.test.js', () => {
     // 创建 ctx
     const ctx = app.mockContext();
 
-    const count = await ctx.service.reply.getCountByAuthorId(user._id);
+    const count = await ctx.service.reply.getCountByAuthorId(user.loginname);
     assert(count >= 1);
   });
 

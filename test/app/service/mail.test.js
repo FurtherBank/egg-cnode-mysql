@@ -6,14 +6,14 @@ describe('test/app/service/mail.test.js', () => {
   describe('sendActiveMail', () => {
     it('should ok', async () => {
       const ctx = app.mockContext();
-      await ctx.service.mail.sendActiveMail('sinchang@foxmail.com', 'token', 'sinchang');
+      await ctx.service.mail.sendActiveMail('lvruitao01@163.com', 'token', 'sinchang');
     });
   });
 
   describe('sendResetPassMail', function() {
     it('should ok', async () => {
       const ctx = app.mockContext();
-      await ctx.service.mail.sendResetPassMail('sinchang@foxmail.com', 'token', 'sinchang');
+      await ctx.service.mail.sendResetPassMail('lvruitao01@163.com', 'token', 'sinchang');
     });
   });
 });

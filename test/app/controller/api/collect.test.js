@@ -15,8 +15,8 @@ describe('test/app/controller/api/collect.test.js', () => {
     const content = 'test topic';
     const tab = 'share';
 
-    const topic = await ctx.service.topic.newAndSave(title, content, tab, user.id);
-    topic_id = topic._id.toString();
+    const topic = await ctx.service.topic.newAndSave(title, content, tab, user.loginname);
+    topic_id = topic.id;
   });
 
   it('post /topic_collect/collect should ok', async () => {
@@ -31,14 +31,14 @@ describe('test/app/controller/api/collect.test.js', () => {
       .post('/api/v1/topic_collect/collect')
       .send({
         accesstoken: user.accessToken,
-        topic_id: '5aaa4432f472129d5e4d6773',
+        topic_id: 0,
       })
       .expect(404);
     await app.httpRequest()
       .post('/api/v1/topic_collect/collect')
       .send({
         accesstoken: user.accessToken,
-        topic_id: '123',
+        topic_id: -1,
       })
       .expect(422);
     const result = await app.httpRequest()
@@ -61,14 +61,14 @@ describe('test/app/controller/api/collect.test.js', () => {
       .post('/api/v1/topic_collect/de_collect')
       .send({
         accesstoken: user.accessToken,
-        topic_id: '123',
+        topic_id: -1,
       })
       .expect(422);
     await app.httpRequest()
       .post('/api/v1/topic_collect/de_collect')
       .send({
         accesstoken: user.accessToken,
-        topic_id: '5aaa4432f472129d5e4d6773',
+        topic_id: 0,
       })
       .expect(404);
     await app.httpRequest()

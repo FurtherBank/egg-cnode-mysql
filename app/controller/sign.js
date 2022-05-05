@@ -23,6 +23,8 @@ class SignController extends Controller {
     const email = validator.trim(ctx.request.body.email || '').toLowerCase();
     const pass = validator.trim(ctx.request.body.pass || '');
     const rePass = validator.trim(ctx.request.body.re_pass || '');
+    const s = ctx.app.Sequelize;
+    const { or } = s.Op;
 
     let msg;
     // 验证信息的正确性
@@ -51,7 +53,7 @@ class SignController extends Controller {
       return;
     }
 
-    const users = await service.user.getUsersByQuery({ $or: [
+    const users = await service.user.getUsersByQuery({ [or]: [
       { loginname },
       { email },
     ] }, {});

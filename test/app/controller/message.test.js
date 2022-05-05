@@ -21,29 +21,30 @@ describe('test/app/controller/message.test.js', () => {
     const title = 'first post';
     const content = 'hello world';
     const tab = 'share';
-    const topic = await ctx.service.topic.newAndSave(title, content, tab, user1._id);
-    topicId = topic._id;
+    const topic = await ctx.service.topic.newAndSave(title, content, tab, user1.loginname);
+    topicId = topic.id;
     assert(topic.title === title);
     assert(topic.content === content);
     assert(topic.tab === tab);
-    assert.equal(topic.author_id, user1._id);
+    assert.equal(topic.author_id, user1.loginname);
   });
 
   it('should GET /my/messages', async () => {
     const ctx = app.mockContext({
       user: {
         name: user2.name,
-        _id: user2._id,
+        loginname: user2.loginname,
         is_admin: false,
+        active: true,
       },
     });
 
-    const message = await ctx.service.message.sendAtMessage(user2._id, user1._id, topicId);
+    const message = await ctx.service.message.sendMessage('at', user2.loginname, user1.loginname, topicId);
     let result = await app.httpRequest().get('/my/messages');
     assert(result.status === 200);
     assert(result.text.includes('first post'));
 
-    ctx.service.message.updateOneMessageToRead(message._id);
+    ctx.service.message.updateOneMessageToRead(message.id);
     result = await app.httpRequest().get('/my/messages');
     assert(result.status === 200);
     assert(result.text.includes('first post'));

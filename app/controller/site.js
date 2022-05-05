@@ -6,6 +6,8 @@ const Controller = require('egg').Controller;
 
 class HomeController extends Controller {
   async index() {
+    const s = this.ctx.app.Sequelize;
+    const { gte, notIn } = s.Op;
     let page = parseInt(this.ctx.query.page, 10) || 1;
     page = page > 0 ? page : 1;
     const tab = this.ctx.query.tab || 'all';
@@ -14,7 +16,7 @@ class HomeController extends Controller {
     const query = {};
     if (!tab || tab === 'all') {
       query.tab = {
-        $nin: [
+        [notIn]: [
           'job',
           'dev',
         ],
@@ -27,8 +29,8 @@ class HomeController extends Controller {
       }
     }
     if (!query.good) {
-      query.create_at = {
-        $gte: moment()
+      query.createdAt = {
+        [gte]: moment()
           .subtract(1, 'years')
           .toDate(),
       };
@@ -36,9 +38,9 @@ class HomeController extends Controller {
 
     const limit = this.config.list_topic_count;
     const options = {
-      skip: (page - 1) * limit,
+      offset: (page - 1) * limit,
       limit,
-      sort: '-top -last_reply_at',
+      order: [[ 'last_reply_at', 'DESC' ]],
     };
 
     const topics = await this.service.topic.getTopicsByQuery(query, options);
@@ -47,7 +49,8 @@ class HomeController extends Controller {
     if (!tops) {
       tops = await this.service.user.getUsersByQuery(
         { is_block: false },
-        { limit: 10, sort: '-score' }
+        { limit: 10,
+          order: [[ 'score', 'DESC' ]] }
       );
       await this.service.cache.setex('tops', tops, 60);
     }
@@ -59,13 +62,13 @@ class HomeController extends Controller {
         {
           reply_count: 0,
           tab: {
-            $nin: [
+            [notIn]: [
               'job',
               'dev',
             ],
           },
         },
-        { limit: 5, sort: '-create_at' }
+        { limit: 5, order: [[ 'createdAt', 'DESC' ]] }
       );
       await this.service.cache.setex(
         'no_reply_topics',
@@ -110,7 +113,7 @@ class HomeController extends Controller {
     if (!sitemapData) {
       const topics = await this.service.topic.getLimit5w();
       topics.forEach(topic => {
-        urlset.ele('url').ele('loc', 'http://cnodejs.org/topic/' + topic._id);
+        urlset.ele('url').ele('loc', 'http://cnodejs.org/topic/' + topic.id);
       });
       sitemapData = urlset.end();
       // 缓存一天

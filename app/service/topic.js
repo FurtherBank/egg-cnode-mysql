@@ -4,12 +4,21 @@ const Service = require('egg').Service;
 const qiniu = require('qiniu');
 
 class TopicService extends Service {
-  /*
+  /**
    * 根据主题ID获取主题
-   * @param {String} id 主题ID
+   * @param {string | number} id 主题ID
    */
   async getTopicById(id) {
-    const topic = await this.ctx.model.Topic.findOne({ _id: id }).exec();
+    id = parseInt(id);
+    if (!id) {
+      return {
+        topic: null,
+        author: null,
+        last_reply: null,
+      };
+    }
+
+    const topic = await this.ctx.model.Topic.findOne({ where: { id } });
     if (!topic) {
       return {
         topic: null,
@@ -18,11 +27,11 @@ class TopicService extends Service {
       };
     }
 
-    const author = await this.service.user.getUserById(topic.author_id);
+    const author = await this.service.user.getUserByLoginName(topic.author_id);
 
     let last_reply = null;
     if (topic.last_reply) {
-      last_reply = await this.service.reply.getReplyById(topic.last_reply);
+      last_reply = await this.service.reply.getReply(topic.last_reply);
     }
 
     return {
@@ -32,22 +41,38 @@ class TopicService extends Service {
     };
   }
 
-  /*
+  /**
    * 获取关键词能搜索到的主题数量
    * @param {String} query 搜索关键词
    */
   getCountByQuery(query) {
-    return this.ctx.model.Topic.count(query).exec();
+    return this.ctx.model.Topic.count({ where: query });
   }
 
-  /*
+  /**
    * 根据关键词，获取主题列表
    * @param {String} query 搜索关键词
    * @param {Object} opt 搜索选项
    */
   async getTopicsByQuery(query, opt) {
     query.deleted = false;
-    const topics = await this.ctx.model.Topic.find(query, {}, opt).exec();
+    const options = Object.assign({
+      where: query,
+      include: [
+        {
+          model: this.ctx.model.User,
+          as: 'author',
+        },
+        {
+          model: this.ctx.model.Reply,
+          include: {
+            all: true,
+          },
+        },
+        this.ctx.model.Message,
+      ],
+    }, opt);
+    const topics = await this.ctx.model.Topic.findAll(options);
 
     if (topics.length === 0) {
       return [];
@@ -55,13 +80,7 @@ class TopicService extends Service {
 
     await Promise.all(
       topics.map(async topic => {
-        const [ author, reply ] = await Promise.all([
-          this.service.user.getUserById(topic.author_id),
-          // 获取主题的最后回复
-          this.service.reply.getReplyById(topic.last_reply),
-        ]);
-        topic.author = author;
-        topic.reply = reply;
+        topic.last_reply = await this.service.reply.getReply(topic.last_reply);
       })
     );
 
@@ -74,11 +93,14 @@ class TopicService extends Service {
   // for sitemap
   getLimit5w() {
     const query = { deleted: false };
-    const opts = { limit: 50000, sort: '-create_at' };
-    return this.ctx.model.Topic.find(query, '_id', opts).exec();
+    return this.ctx.model.Topic.findAll({
+      where: query,
+      limit: 50000,
+      order: [[ 'createdAt', 'DESC' ]],
+    });
   }
 
-  /*
+  /**
    * 获取所有信息的主题
    * Callback:
    * - err, 数据库异常
@@ -88,100 +110,109 @@ class TopicService extends Service {
    * - replies, 主题的回复
    * @param {String} id 主题ID
    * @param {Function} callback 回调函数
+   * @return [topic, author, replies]
    */
   async getFullTopic(id) {
-    const query = { _id: id, deleted: false };
-    const topic = await this.ctx.model.Topic.findOne(query);
+    id = parseInt(id);
+    if (!id) return null;
 
-    if (!topic) {
+    const query = { id, deleted: false };
+    const topic = await this.ctx.model.Topic.findOne({
+      where: query,
+      include: [
+        {
+          model: this.ctx.model.User,
+          as: 'author',
+        },
+        {
+          model: this.ctx.model.Reply,
+          include: {
+            all: true,
+          },
+        },
+        this.ctx.model.Message,
+      ],
+    });
+
+    if (!topic || !topic.author) {
       // throw new Error('此话题不存在或已被删除。');
-      return [];
+      return null;
     }
 
     topic.linkedContent = this.service.at.linkUsers(topic.content);
 
-    const author = await this.service.user.getUserById(topic.author_id);
-    if (!author) {
-      // throw new Error('话题的作者丢了。');
-      return [];
-    }
-
-    const replies = await this.service.reply.getRepliesByTopicId(topic._id);
-    return [ topic, author, replies ];
-  }
-
-  /*
-   * 更新主题的最后回复信息
-   * @param {String} topicId 主题ID
-   * @param {String} replyId 回复ID
-   * @param {Function} callback 回调函数
-   */
-  updateLastReply(topicId, replyId) {
-    const update = {
-      last_reply: replyId,
-      last_reply_at: new Date(),
-      $inc: {
-        reply_count: 1,
-      },
-    };
-    const opts = { new: true };
-    return this.ctx.model.Topic.findByIdAndUpdate(topicId, update, opts).exec();
-  }
-
-  /*
-   * 根据主题ID，查找一条主题
-   * @param {String} id 主题ID
-   * @param {Function} callback 回调函数
-   */
-  getTopic(id) {
-    return this.ctx.model.Topic.findOne({ _id: id }).exec();
-  }
-
-  /*
-   * 将当前主题的回复计数减1，并且更新最后回复的用户，删除回复时用到
-   * @param {String} id 主题ID
-   */
-  async reduceCount(id) {
-    const update = { $inc: { reply_count: -1 } };
-    const reply = await this.service.reply.getLastReplyByTopId(id);
-    if (reply) {
-      update.last_reply = reply._id;
-    } else {
-      update.last_reply = null;
-    }
-    const opts = { new: true };
-
-    const topic = await this.ctx.model.Topic.findByIdAndUpdate(id, update, opts).exec();
-    if (!topic) {
-      throw new Error('该主题不存在');
-    }
-
     return topic;
   }
 
-  incrementVisitCount(id) {
-    const query = { _id: id };
-    const update = { $inc: { visit_count: 1 } };
-    return this.ctx.model.Topic.findByIdAndUpdate(query, update).exec();
+  /**
+   * 更新主题的最后回复信息
+   * @param {String} topicId 主题ID
+   * @param {String} replyId 回复ID
+   * @return 更新结果
+   */
+  async updateLastReply(topicId = 0, replyId = 0) {
+    topicId = parseInt(topicId);
+    if (!topicId) return 0;
+    const s = this.app.Sequelize;
+    const update = {
+      last_reply: replyId,
+      last_reply_at: new Date(),
+      reply_count: s.literal('`reply_count` + 1'),
+    };
+    const [ result ] = await this.ctx.model.Topic.update(update, { where: { id: topicId } });
+    return result;
   }
 
-  incrementCollectCount(id) {
-    const query = { _id: id };
-    const update = { $inc: { collect_count: 1 } };
-    return this.ctx.model.Topic.findByIdAndUpdate(query, update).exec();
+  /**
+   * 根据主题ID，查找一条主题
+   * @param {String} id 主题ID
+   */
+  async getTopic(id) {
+    id = parseInt(id);
+    if (!id) return null;
+    return this.ctx.model.Topic.findOne({ where: { id } });
   }
 
-  newAndSave(title, content, tab, authorId) {
-    const topic = new this.ctx.model.Topic();
-    topic.title = title;
-    topic.content = content;
-    topic.tab = tab;
-    topic.author_id = authorId;
+  /**
+   * 将当前主题的回复计数减1，并且更新最后回复的用户，删除回复时用到
+   * @param {string} id 主题ID
+   * @return {number} 更新的情况
+   */
+  async reduceCount(id = 0) {
+    const s = this.app.Sequelize;
+    const update = { reply_count: s.literal('`reply_count` - 1') };
+    const reply = await this.service.reply.getLastReplyByTopId(id);
+    if (reply) {
+      update.last_reply = reply.id;
+    } else {
+      update.last_reply = null;
+    }
 
-    return topic.save();
+    const topic = await this.ctx.model.Topic.update(update, { where: { id } });
+    if (topic[0] < 1) {
+      throw new Error('该主题不存在');
+    }
+
+    return topic[0];
   }
 
-  /*
+  async incrementVisitCount(id) {
+    const s = this.app.Sequelize;
+    const update = { visit_count: s.literal('`reply_count` + 1') };
+    return this.ctx.model.Topic.update(update, { where: { id } });
+  }
+
+  async newAndSave(title, content, tab, authorId) {
+    return this.ctx.model.Topic.create({
+      title,
+      content,
+      tab,
+      author_id: authorId,
+    });
+
+  }
+
+  /**
    * 七牛上传
    * @param {Stream} readableStream 流
    * @param {String} key 文件名key

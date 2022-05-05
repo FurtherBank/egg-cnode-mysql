@@ -48,9 +48,15 @@ describe('test/app/service/user.test.js', () => {
     // 创建 ctx
     const ctx = app.mockContext();
 
-    const user = await ctx.service.user.getUserByLoginName(loginname);
+    let user = await ctx.service.user.getUserByLoginName(loginname);
     assert(user);
     assert(user.loginname === loginname);
+
+    user = await ctx.service.user.getUserByLoginName('unexisted_name');
+    assert(user === null);
+
+    user = await ctx.service.user.getUserByLoginName('');
+    assert(user === null);
   });
 
   it('getUserByGithubId should ok', async function() {
@@ -58,17 +64,6 @@ describe('test/app/service/user.test.js', () => {
     const ctx = app.mockContext();
 
     const user = await ctx.service.user.getUserByGithubId('githubid');
-    assert(user === null);
-  });
-
-  it('getUserById should ok', async function() {
-    // 创建 ctx
-    const ctx = app.mockContext();
-
-    let user = await ctx.service.user.getUserById('565c4473d0bc14ae279399fe');
-    assert(user === null);
-
-    user = await ctx.service.user.getUserById('');
     assert(user === null);
   });
 
@@ -80,20 +75,12 @@ describe('test/app/service/user.test.js', () => {
     assert(user === null);
   });
 
-  it('getUsersByIds should ok', async function() {
-    // 创建 ctx
-    const ctx = app.mockContext();
-
-    const users = await ctx.service.user.getUsersByIds([ '565c4473d0bc14ae279399fe' ]);
-    assert(users.length === 0);
-  });
-
   it('getUsersByQuery should ok', async function() {
     // 创建 ctx
     const ctx = app.mockContext();
 
     const users = await ctx.service.user.getUsersByQuery({
-      _id: '565c4473d0bc14ae279399fe',
+      loginname: 'unexisted_name',
     });
     assert(users.length === 0);
   });

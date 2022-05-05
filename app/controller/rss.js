@@ -12,6 +12,8 @@ function utf8ForXml(inputStr) {
 
 class RSSController extends Controller {
   async index() {
+    const s = this.ctx.app.Sequelize;
+    const { notIn } = s.Op;
     const config = this.config;
     if (!config.rss) {
       this.ctx.status = 404;
@@ -28,9 +30,9 @@ class RSSController extends Controller {
 
     const opt = {
       limit: config.rss.max_rss_items,
-      sort: '-create_at',
+      order: [[ 'createdAt', 'DESC' ]],
     };
-    const query = { tab: { $nin: [ 'dev' ] } };
+    const query = { tab: { [notIn]: [ 'dev' ] } };
     const topics = await this.service.topic.getTopicsByQuery(query, opt);
     const rss_obj = {
       _attr: { version: '2.0' },
@@ -46,11 +48,11 @@ class RSSController extends Controller {
     topics.forEach(topic => {
       rss_obj.channel.item.push({
         title: topic.title,
-        link: config.rss.link + '/topic/' + topic._id,
-        guid: config.rss.link + '/topic/' + topic._id,
+        link: config.rss.link + '/topic/' + topic.id,
+        guid: config.rss.link + '/topic/' + topic.id,
         description: this.ctx.helper.markdown(topic.content),
         author: topic.author.loginname,
-        pubDate: topic.create_at.toUTCString(),
+        pubDate: topic.createdAt.toUTCString(),
       });
     });
 

@@ -13,10 +13,10 @@ exports.redis = {
   package: 'egg-redis',
 };
 
-exports.mongoose = {
-  enable: true,
-  package: 'egg-mongoose',
-};
+// exports.mongoose = {
+//   enable: true,
+//   package: 'egg-mongoose',
+// };
 
 exports.passport = {
   enable: true,
@@ -47,4 +47,9 @@ exports.validate = {
 exports.routerPlus = {
   enable: true,
   package: 'egg-router-plus',
+};
+
+exports.sequelize = {
+  enable: true,
+  package: 'egg-sequelize',
 };

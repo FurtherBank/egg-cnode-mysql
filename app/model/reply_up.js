@@ -3,20 +3,20 @@
 module.exports = app => {
   const { INTEGER, STRING } = app.Sequelize;
 
-  const TopicCollect = app.model.define('topic_collect', {
+  const ReplyUp = app.model.define('reply_up', {
+    reply_id: { type: INTEGER },
     author_id: { type: STRING(30) },
-    topic_id: { type: INTEGER },
   }, {
     indexes: [
       {
         fields: [
+          'reply_id',
           'author_id',
-          'topic_id',
         ],
         unique: true,
       },
     ],
   });
 
-  return TopicCollect;
+  return ReplyUp;
 };

@@ -36,22 +36,22 @@ class ReplyController extends Controller {
       return;
     }
 
-    const user_id = ctx.user._id;
-    const topicAuthor = await service.user.getUserById(topic.author_id);
+    const user_id = ctx.user.loginname;
+    const topicAuthor = await service.user.getUserByLoginName(topic.author_id);
     const newContent = content.replace('@' + topicAuthor.loginname + ' ', '');
     const reply = await service.reply.newAndSave(content, topic_id, user_id, reply_id);
 
     await Promise.all([
       service.user.incrementScoreAndReplyCount(user_id, 5, 1),
-      service.topic.updateLastReply(topic_id, reply._id),
+      service.topic.updateLastReply(topic_id, reply.id),
     ]);
 
-    await service.at.sendMessageToMentionUsers(newContent, topic_id, user_id, reply._id);
+    await service.at.sendMessageToMentionUsers(newContent, topic_id, user_id, reply.id);
     if (topic.author_id.toString() !== user_id.toString()) {
-      await service.message.sendReplyMessage(topic.author_id, user_id, topic._id, reply._id);
+      await service.message.sendMessage('reply', topic.author_id, user_id, topic.id, reply.id);
     }
 
-    ctx.redirect('/topic/' + topic_id + '#' + reply._id);
+    ctx.redirect('/topic/' + topic_id + '#' + reply.id);
   }
   /**
    * 打开回复编辑器
@@ -59,16 +59,16 @@ class ReplyController extends Controller {
   async showEdit() {
     const { ctx, service } = this;
     const reply_id = ctx.params.reply_id;
-    const reply = await service.reply.getReplyById(reply_id);
+    const reply = await service.reply.getReply(reply_id);
 
     if (!reply) {
       ctx.status = 404;
       ctx.message = '此回复不存在或已被删除。';
       return;
     }
-    if (ctx.user._id.toString() === reply.author_id.toString() || ctx.user.is_admin) {
+    if (ctx.user.loginname.toString() === reply.author_id.toString() || ctx.user.is_admin) {
       await ctx.render('reply/edit', {
-        reply_id: reply._id,
+        reply_id: reply.id,
         content: reply.content,
       });
       return;
@@ -86,19 +86,19 @@ class ReplyController extends Controller {
     const { ctx, service } = this;
     const reply_id = ctx.params.reply_id;
     const content = ctx.request.body.t_content;
-    const reply = await service.reply.getReplyById(reply_id);
+    const reply = await service.reply.getReply(reply_id);
 
     if (!reply) {
       ctx.status = 404;
       ctx.message = '此回复不存在或已被删除。';
       return;
     }
-    if (ctx.user._id.toString() === reply.author_id.toString() || ctx.user.is_admin) {
+    if (ctx.user.loginname.toString() === reply.author_id.toString() || ctx.user.is_admin) {
       if (content.trim() !== '') {
         reply.content = content;
-        reply.update_at = new Date();
+        reply.updatedAt = new Date();
         await reply.save();
-        ctx.redirect('/topic/' + reply.topic_id + '#' + reply._id);
+        ctx.redirect('/topic/' + reply.topic_id + '#' + reply.id);
         return;
       }
       ctx.status = 400;
@@ -119,14 +119,14 @@ class ReplyController extends Controller {
   async delete() {
     const { ctx, service } = this;
     const reply_id = ctx.params.reply_id;
-    const reply = await service.reply.getReplyById(reply_id);
+    const reply = await service.reply.getReply(reply_id);
 
     if (!reply) {
       ctx.status = 422;
       ctx.body = { status: 'no reply ' + reply_id + ' exists' };
       return;
     }
-    if (reply.author_id.toString() === ctx.user._id.toString() || ctx.user.is_admin) {
+    if (reply.author_id.toString() === ctx.user.loginname.toString() || ctx.user.is_admin) {
       reply.deleted = true;
       reply.save();
       ctx.status = 200;
@@ -147,8 +147,8 @@ class ReplyController extends Controller {
   async up() {
     const { ctx, service } = this;
     const reply_id = ctx.params.reply_id;
-    const user_id = ctx.user._id;
-    const reply = await service.reply.getReplyById(reply_id);
+    const user_id = ctx.user.loginname;
+    const reply = await service.reply.getReply(reply_id);
 
     if (!reply) {
       ctx.status = 404;
@@ -163,16 +163,15 @@ class ReplyController extends Controller {
       return;
     }
     let action;
-    reply.ups = reply.ups || [];
-    const upIndex = reply.ups.indexOf(user_id);
-    if (upIndex === -1) {
-      reply.ups.push(user_id);
+    const hasUped = reply.upers.find(uper => uper.loginname === user_id);
+    if (hasUped === undefined) {
+      await reply.addUper(ctx.user);
       action = 'up';
     } else {
-      reply.ups.splice(upIndex, 1);
+      await reply.removeUper(ctx.user);
       action = 'down';
     }
-    await reply.save();
+
     ctx.body = {
       success: true,
       action,

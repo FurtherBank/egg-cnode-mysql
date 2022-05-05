@@ -18,7 +18,7 @@ module.exports = appInfo => {
   // use for cookie sign key, should change to your own and keep security
   config.keys = appInfo.name + '_1519887194138_3450';
 
-  config.host = 'http://cnodejs.org';
+  config.host = 'http://10.35.201.1:7001';
 
   config.session_secret = 'node_club_secret'; // 务必修改
 
@@ -114,13 +114,23 @@ module.exports = appInfo => {
   /**
    * @see http://mongodb.github.io/node-mongodb-native/2.2/api/Db.html#createCollection
    */
-  config.mongoose = {
-    url: process.env.EGG_MONGODB_URL || 'mongodb://127.0.0.1:27017/egg_cnode',
-    options: {
-      server: { poolSize: 20 },
-      reconnectTries: 10,
-      reconnectInterval: 500,
-    },
+  // config.mongoose = {
+  //   url: process.env.EGG_MONGODB_URL || 'mongodb://127.0.0.1:27017/egg_cnode',
+  //   options: {
+  //     server: { poolSize: 20 },
+  //     reconnectTries: 10,
+  //     reconnectInterval: 500,
+  //     useFindAndModify: false,
+  //   },
+  // };
+
+  config.sequelize = {
+    dialect: 'mysql',
+    host: '127.0.0.1',
+    port: 3306,
+    database: 'egg-sequelize-cnode-default',
+    password: 'secret',
+    timezone: '+08:00',
   };
 
   // passport
@@ -136,13 +146,13 @@ module.exports = appInfo => {
 
   // 邮箱配置
   config.mail_opts = {
-    host: 'smtp.126.com',
-    port: 25,
+    host: 'smtp.qq.com',
+    port: 465,
     auth: {
-      user: 'club@126.com',
-      pass: 'club',
+      user: 'your_qq_mail',
+      pass: 'your_mail_token',
     },
-    ignoreTLS: true,
+    secure: true,
   };
 
   config.alinode = {
@@ -160,7 +170,7 @@ module.exports = appInfo => {
   // 每个 IP 每天可创建用户数
   config.create_user_per_ip = 1000;
 
-  config.search = 'google'; // 'google', 'baidu', 'local'
+  config.search = 'local'; // 'google', 'baidu', 'local'
 
   config.security = {
     csrf: {

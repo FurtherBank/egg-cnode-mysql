@@ -4,7 +4,8 @@ const Controller = require('egg').Controller;
 
 const MongoObjectIdSchema = {
   type: 'string',
-  format: /^[0-9a-f]{24}$/i,
+  format: /^[0-9]+$/i,
+  max: 10,
 };
 
 class ReplyController extends Controller {
@@ -47,24 +48,24 @@ class ReplyController extends Controller {
       return;
     }
 
-    const reply = await ctx.service.reply.newAndSave(content, topicId, ctx.request.user.id, replyId);
-    await ctx.service.topic.updateLastReply(topicId, reply._id);
+    const reply = await ctx.service.reply.newAndSave(content, topicId, ctx.request.user.loginname, replyId);
+    await ctx.service.topic.updateLastReply(topicId, reply.id);
     // 发送 at 消息，并防止重复 at 作者
     const newContent = content.replace('@' + author.loginname + ' ', '');
-    await ctx.service.at.sendMessageToMentionUsers(newContent, topicId, ctx.request.user.id, reply._id);
+    await ctx.service.at.sendMessageToMentionUsers(newContent, topicId, ctx.request.user.loginname, reply.id);
 
-    const user = await ctx.service.user.getUserById(ctx.request.user.id);
+    const user = await ctx.service.user.getUserByLoginName(ctx.request.user.loginname);
     user.score += 5;
     user.reply_count += 1;
     await user.save();
 
-    if (topic.author_id.toString() !== ctx.request.user.id.toString()) {
-      await ctx.service.message.sendReplyMessage(topic.author_id, ctx.request.user.id, topic._id, reply._id);
+    if (topic.author_id.toString() !== ctx.request.user.loginname.toString()) {
+      await ctx.service.message.sendMessage('reply', topic.author_id, ctx.request.user.loginname, topic.id, reply.id);
     }
 
     ctx.body = {
       success: true,
-      reply_id: reply._id,
+      reply_id: reply.id,
     };
   }
 
@@ -74,10 +75,16 @@ class ReplyController extends Controller {
       reply_id: MongoObjectIdSchema,
     }, ctx.params);
 
-    const replyId = ctx.params.reply_id;
-    const userId = ctx.request.user.id;
+    const replyId = parseInt(ctx.params.reply_id);
+    const userId = ctx.request.user.loginname;
 
-    const reply = await ctx.service.reply.getReplyById(replyId);
+    if (!replyId) {
+      ctx.status = 422;
+      ctx.body = { success: false, error_msg: '提供了错误的 id' };
+      return;
+    }
+
+    const reply = await ctx.service.reply.getReply(replyId);
 
     if (!reply) {
       ctx.status = 404;
@@ -85,25 +92,22 @@ class ReplyController extends Controller {
       return;
     }
 
-    if (reply.author_id.equals(userId)) {
+    if (reply.author_id === userId) {
       ctx.status = 403;
       ctx.body = { success: false, error_msg: '不能帮自己点赞' };
       return;
     }
 
     let action = '';
-    reply.ups = (reply.ups || []);
-    const ups = reply.ups;
-    const upIndex = ups.indexOf(userId);
-    if (upIndex === -1) {
-      ups.push(userId);
+    const hasUped = reply.upers.find(uper => uper.loginname === userId);
+
+    if (hasUped === undefined) {
+      await reply.addUper(ctx.request.user);
       action = 'up';
     } else {
-      ups.splice(upIndex, 1);
+      await reply.removeUper(ctx.request.user);
       action = 'down';
     }
-
-    await reply.save();
 
     ctx.body = {
       action,

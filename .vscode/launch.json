@@ -1,0 +1,99 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Egg Debug",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": [
+                "run",
+                "debug",
+                "--",
+                "--inspect-brk"
+            ],
+            "env": {
+                "EGG_REDIS_DB": "0",
+                "EGG_REDIS_HOST": "localhost",
+                "EGG_REDIS_PORT": "6379",
+                "EGG_REDIS_PASSWORD": "egg_cnode",
+                "EGG_PASSPORT_GITHUB_CLIENT_ID": "your_github_client_id",
+                "EGG_PASSPORT_GITHUB_CLIENT_SECRET": "your_github_client_secret"
+            },
+            "console": "integratedTerminal",
+            "restart": true,
+            "protocol": "auto",
+            "port": 9229,
+            "autoAttachChildProcesses": true
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Egg Test",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": [
+                "run",
+                "test-local",
+                "--",
+                "--inspect-brk"
+            ],
+            "env": {
+                "EGG_REDIS_DB": "1",
+                "EGG_REDIS_HOST": "localhost",
+                "EGG_REDIS_PORT": "6379",
+                "EGG_REDIS_PASSWORD": "egg_cnode",
+                "EGG_PASSPORT_GITHUB_CLIENT_ID": "your_github_client_id",
+                "EGG_PASSPORT_GITHUB_CLIENT_SECRET": "your_github_client_secret"
+            },
+            "console": "integratedTerminal",
+            "protocol": "auto",
+            "port": 9229,
+            "autoAttachChildProcesses": true
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Egg Coverage",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": [
+                "run",
+                "cov",
+                "--",
+                "--inspect-brk"
+            ],
+            "env": {
+                "EGG_REDIS_DB": "1",
+                "EGG_REDIS_HOST": "localhost",
+                "EGG_REDIS_PORT": "6379",
+                "EGG_REDIS_PASSWORD": "egg_cnode",
+                "EGG_PASSPORT_GITHUB_CLIENT_ID": "your_github_client_id",
+                "EGG_PASSPORT_GITHUB_CLIENT_SECRET": "your_github_client_secret"
+            },
+            "console": "integratedTerminal",
+            "protocol": "auto",
+            "port": 9229,
+            "autoAttachChildProcesses": true
+        },
+        {
+            "type": "node",
+            "request": "attach",
+            "name": "Egg Attach to remote",
+            "localRoot": "${workspaceRoot}",
+            "remoteRoot": "/usr/src/app",
+            "address": "localhost",
+            "env": {
+                "EGG_REDIS_DB": "0",
+                "EGG_REDIS_HOST": "localhost",
+                "EGG_REDIS_PORT": "6379",
+                "EGG_REDIS_PASSWORD": "egg_cnode",
+                "EGG_PASSPORT_GITHUB_CLIENT_ID": "your_github_client_id",
+                "EGG_PASSPORT_GITHUB_CLIENT_SECRET": "your_github_client_secret"
+            },
+            "protocol": "auto",
+            "port": 9999
+        }
+    ]
+}

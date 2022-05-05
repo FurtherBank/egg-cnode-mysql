@@ -4,30 +4,27 @@ const Service = require('egg').Service;
 
 class TopicCollectService extends Service {
   getTopicCollect(userId, topicId) {
-    const query = { user_id: userId, topic_id: topicId };
-    return this.ctx.model.TopicCollect.findOne(query).exec();
+    const query = { author_id: userId, topic_id: parseInt(topicId) };
+    return this.ctx.model.TopicCollect.findOne({ where: query });
   }
 
   getTopicCollectsByUserId(userId, opt) {
-    const defaultOpt = { sort: '-create_at' };
-    opt = Object.assign(defaultOpt, opt);
-    return this.ctx.model.TopicCollect.find(
-      { user_id: userId },
-      '',
-      opt
-    ).exec();
+    const query = { where: { author_id: userId }, order: [[ 'createdAt', 'DESC' ]] };
+    const option = Object.assign(query, opt);
+    return this.ctx.model.TopicCollect.findAll(
+      option
+    );
   }
 
-  newAndSave(userId, topicId) {
-    const topic_collect = new this.ctx.model.TopicCollect();
-    topic_collect.user_id = userId;
-    topic_collect.topic_id = topicId;
-    return topic_collect.save();
-  }
-
+  /**
+   * 移除一个话题的收藏
+   * @param {string} userId 删除的用户名
+   * @param {number | string} topicId 删除的话题 id
+   * @return {Promise<number>}	The number of destroyed rows
+   */
   remove(userId, topicId) {
-    const query = { user_id: userId, topic_id: topicId };
-    return this.ctx.model.TopicCollect.remove(query).exec();
+    const query = { author_id: userId, topic_id: parseInt(topicId) };
+    return this.ctx.model.TopicCollect.destroy({ where: query });
   }
 }
 

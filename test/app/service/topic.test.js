@@ -7,7 +7,6 @@ describe('test/app/service/topic.test.js', () => {
   let topic;
   let topicId;
   let replyId;
-  let userId;
   let loginname;
   let email;
 
@@ -17,7 +16,7 @@ describe('test/app/service/topic.test.js', () => {
     loginname = `loginname_${Date.now()}`;
     email = `${loginname}@test.com`;
     const result = await ctx.service.user.newAndSave('name', loginname, 'pass', email, 'avatar_url', 'active');
-    userId = result._id;
+    loginname = result.loginname;
     assert(result.loginname === loginname);
   });
 
@@ -25,32 +24,32 @@ describe('test/app/service/topic.test.js', () => {
     const title = 'first post';
     const content = 'hello world';
     const tab = 'share';
-    const result = await topic.newAndSave(title, content, tab, userId);
+    const result = await topic.newAndSave(title, content, tab, loginname);
     assert(result.title === title);
     assert(result.content === content);
     assert(result.tab === tab);
-    assert.equal(result.author_id, userId);
-    topicId = result._id;
-    const reply = await ctx.service.reply.newAndSave('hi', topicId, userId);
+    assert.equal(result.author_id, loginname);
+    topicId = result.id;
+    const reply = await ctx.service.reply.newAndSave('hi', topicId, loginname);
     assert(reply.content === 'hi');
-    assert(reply.author_id === userId);
+    assert(reply.author_id === loginname);
     assert(reply.topic_id === topicId);
-    replyId = reply._id;
+    replyId = reply.id;
   });
 
   it('updateLastReply should ok', async () => {
     const result1 = await topic.updateLastReply(topicId, replyId);
-    assert(result1.last_reply.toString() === replyId.toString());
+    assert(result1 > 0);
     const result2 = await topic.updateLastReply();
     assert(!result2);
   });
 
   it('getTopicById should ok', async () => {
     const result1 = await topic.getTopicById(topicId);
-    assert.equal(result1.topic._id.toString(), topicId);
-    assert.equal(result1.author._id.toString(), userId);
-    assert.equal(result1.last_reply._id.toString(), replyId);
-    const result2 = await topic.getTopicById();
+    assert.equal(result1.topic.id.toString(), topicId);
+    assert.equal(result1.author.loginname.toString(), loginname);
+    assert.equal(result1.last_reply.id.toString(), replyId);
+    const result2 = await topic.getTopicById(0);
     assert(result2.topic === null);
     assert(result2.author === null);
     assert(result2.last_reply === null);
@@ -83,31 +82,18 @@ describe('test/app/service/topic.test.js', () => {
     assert(result.length >= 1);
   });
 
-  it('getFullTopic should ok', async () => {
-    const result1 = await topic.getFullTopic();
-    assert(result1.length === 0);
-
-    const result2 = await topic.getFullTopic(topicId);
-    assert.equal(result2[0]._id.toString(), topicId);
-    assert(result2[1].loginname === loginname);
-
-    await ctx.model.User.deleteOne({ _id: userId }).exec();
-    const result3 = await topic.getFullTopic(topicId);
-    assert(result3.length === 0);
-  });
-
   it('getTopic should ok', async () => {
-    const result = await topic.getTopic(topicId);
-    assert.equal(result._id.toString(), topicId);
-    assert.equal(result.author_id.toString(), userId);
+    const result = await ctx.service.topic.getTopic(topicId);
+    assert.equal(result.id, topicId);
+    assert.equal(result.author_id.toString(), loginname);
   });
 
   it('reduceCount should ok', async () => {
     const result1 = await topic.reduceCount(topicId);
-    assert(result1.last_reply, replyId);
-    await ctx.model.Reply.deleteOne({ _id: replyId }).exec();
+    assert(result1 > 0, replyId);
+    await ctx.model.Reply.destroy({ where: { id: replyId } });
     const result2 = await topic.reduceCount(topicId);
-    assert(result2.last_reply === null);
+    assert(result2 > 0);
 
     let err;
     try {
@@ -118,4 +104,18 @@ describe('test/app/service/topic.test.js', () => {
     }
     assert(err);
   });
+
+  it('getFullTopic should ok', async () => {
+    const result1 = await topic.getFullTopic(0);
+    assert(result1 === null);
+
+    const topic2 = await topic.getFullTopic(topicId);
+    assert.equal(topic2.id.toString(), topicId);
+    assert(topic2.author.loginname === loginname);
+
+    await ctx.model.Topic.destroy({ where: { id: topicId } });
+    const topic3 = await topic.getFullTopic(topicId);
+    assert(topic3 === null);
+  });
+
 });

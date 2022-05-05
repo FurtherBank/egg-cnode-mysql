@@ -13,7 +13,7 @@ describe('test/app/service/search.test.js', () => {
     const email = `${loginname}@test.com`;
     const user = await ctx.service.user.newAndSave(loginname, loginname, 'pass', email, 'avatar_url', 'active');
     assert(user.loginname === loginname);
-    const userId = user._id;
+    const userId = user.loginname;
     const title = keyword;
     const content = 'hello world';
     const tab = 'share';

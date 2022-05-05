@@ -18,7 +18,7 @@ class SearchController extends Controller {
       case 'baidu':
         return this.ctx.redirect(`https://www.baidu.com/s?wd=site:cnodejs.org+${q}`);
       case 'local':
-        return await this.ctx.render('search/index', await this.service.search.searchLocal(this.ctx.query, q));
+        return this.ctx.render('search/index', await this.service.search.searchLocal(this.ctx.query, q));
       default:
         return this.ctx.redirect('/');
     }

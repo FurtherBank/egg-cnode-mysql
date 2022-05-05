@@ -10,8 +10,6 @@ function randomInt() {
 describe('test/app/controller/topic.test.js', () => {
   const objectId = '565c4473d0bc14ae279399fe';
   let ctx,
-    topicId,
-    userId,
     key,
     username,
     user,
@@ -31,66 +29,51 @@ describe('test/app/controller/topic.test.js', () => {
       'avatar_url',
       'active'
     );
-
-    userId = user._id;
-
-    topic = await ctx.service.topic.newAndSave(
-      'title',
-      'content',
-      'share',
-      userId
+    fakeUser = await ctx.service.user.newAndSave(
+      'cnode',
+      'cnode' + key,
+      'pass',
+      'cnode' + key + '@test.com',
+      'avatar_url',
+      'active'
     );
 
-    mockUser = (isAdmin = false) => {
-      app.mockContext({
-        user: {
-          name: username,
-          _id: userId,
-          is_admin: isAdmin,
-        },
-      });
+    topic = await user.createTopic({
+      title: 'title',
+      content: 'content',
+      tab: 'share',
+    });
+
+    mockUser = (user, isAdmin = false) => {
+      user.is_admin = isAdmin;
+      app.mockContext({ user });
       app.mockCsrf();
     };
 
-    fakeUser = () => {
-      app.mockContext({
-        user: {
-          name: 'cnode',
-          _id: objectId,
-          is_admin: false,
-        },
-      });
-      app.mockCsrf();
-    };
+    await user.addCollectedTopic(topic);
 
-    await ctx.service.topicCollect.newAndSave(
-      userId,
-      topicId
-    );
-
-    topicId = topic._id;
-    await ctx.service.reply.newAndSave('hi', topicId, userId);
+    await ctx.service.reply.newAndSave('hi', topic.id, user.loginname);
   });
 
   it('should GET /topic/:tid ok', async () => {
-    await app.httpRequest().get(`/topic/${topicId}`).expect(200);
+    await app.httpRequest().get(`/topic/${topic.id}`).expect(200);
     await app.httpRequest().get('/topic/123').expect(404);
-    mockUser();
+    mockUser(user);
     ctx.service.cache.setex('no_reply_topics', null, 60);
-    await app.httpRequest().get(`/topic/${topicId}`).expect(200);
+    await app.httpRequest().get(`/topic/${topic.id}`).expect(200);
   });
 
   it('should GET /topic/create ok', async () => {
-    mockUser();
+    mockUser(user);
     await app.httpRequest().get('/topic/create').expect(200);
   });
 
   it('should GET /topic/:tid/edit ok', async () => {
-    fakeUser();
-    await app.httpRequest().get(`/topic/${topicId}/edit`).expect(403);
-    mockUser();
+    mockUser(fakeUser);
+    await app.httpRequest().get(`/topic/${topic.id}/edit`).expect(403);
+    mockUser(user);
     await app.httpRequest().get(`/topic/${objectId}/edit`).expect(404);
-    await app.httpRequest().get(`/topic/${topicId}/edit`).expect(200);
+    await app.httpRequest().get(`/topic/${topic.id}/edit`).expect(200);
   });
 
   it('should POST /topic/create forbidden', async () => {
@@ -99,7 +82,7 @@ describe('test/app/controller/topic.test.js', () => {
   });
 
   it('should POST /topic/create forbidden', async () => {
-    mockUser();
+    mockUser(user);
     app.mockCsrf();
     await app.httpRequest().post('/topic/create')
       .send({
@@ -109,7 +92,7 @@ describe('test/app/controller/topic.test.js', () => {
   });
 
   it('should POST /topic/create ok', async () => {
-    mockUser();
+    mockUser(user);
     app.mockCsrf();
     await app.httpRequest().post('/topic/create')
       .send({
@@ -121,7 +104,7 @@ describe('test/app/controller/topic.test.js', () => {
   });
 
   it('should POST /topic/create per day limit works', async () => {
-    mockUser();
+    mockUser(user);
     app.mockCsrf();
     for (let i = 0; i < 9; i++) {
       await app.httpRequest().post('/topic/create')
@@ -142,30 +125,30 @@ describe('test/app/controller/topic.test.js', () => {
   });
 
   it('should POST /topic/:tid/top ok', async () => {
-    mockUser();
-    const res = await app.httpRequest().post(`/topic/${topicId}/top`);
+    mockUser(user);
+    const res = await app.httpRequest().post(`/topic/${topic.id}/top`);
     assert(res.text.includes('需要管理员权限。'));
-    mockUser(true);
+    mockUser(user, true);
     await app.httpRequest().post(`/topic/${objectId}/top`).expect(404);
-    await app.httpRequest().post(`/topic/${topicId}/top`).expect(200);
+    await app.httpRequest().post(`/topic/${topic.id}/top`).expect(200);
   });
 
   it('should POST /topic/:tid/good ok', async () => {
-    mockUser();
-    const res = await app.httpRequest().post(`/topic/${topicId}/good`);
+    mockUser(user);
+    const res = await app.httpRequest().post(`/topic/${topic.id}/good`);
     assert(res.text.includes('需要管理员权限。'));
-    mockUser(true);
+    mockUser(user, true);
     await app.httpRequest().post(`/topic/${objectId}/good`).expect(404);
-    await app.httpRequest().post(`/topic/${topicId}/good`).expect(200);
+    await app.httpRequest().post(`/topic/${topic.id}/good`).expect(200);
   });
 
   it('should POST /topic/:tid/lock ok', async () => {
-    mockUser();
-    const res = await app.httpRequest().post(`/topic/${topicId}/lock`);
+    mockUser(user);
+    const res = await app.httpRequest().post(`/topic/${topic.id}/lock`);
     assert(res.text.includes('需要管理员权限。'));
-    mockUser(true);
+    mockUser(user, true);
     await app.httpRequest().post(`/topic/${objectId}/lock`).expect(404);
-    await app.httpRequest().post(`/topic/${topicId}/lock`).expect(200);
+    await app.httpRequest().post(`/topic/${topic.id}/lock`).expect(200);
   });
 
   it('should POST /topic/:tid/edit ok', async () => {
@@ -175,14 +158,14 @@ describe('test/app/controller/topic.test.js', () => {
       content: '',
     };
 
-    fakeUser();
+    mockUser(fakeUser);
     await app
       .httpRequest()
-      .post(`/topic/${topicId}/edit`)
+      .post(`/topic/${topic.id}/edit`)
       .send(body)
       .expect(403);
 
-    mockUser();
+    mockUser(user);
     await app
       .httpRequest()
       .post(`/topic/${objectId}/edit`)
@@ -191,46 +174,46 @@ describe('test/app/controller/topic.test.js', () => {
 
     const r1 = await app
       .httpRequest()
-      .post(`/topic/${topicId}/edit`)
+      .post(`/topic/${topic.id}/edit`)
       .send(body);
     assert(r1.text.includes('标题不能是空的。'));
 
     body.title = 'hi';
     const r2 = await app
       .httpRequest()
-      .post(`/topic/${topicId}/edit`)
+      .post(`/topic/${topic.id}/edit`)
       .send(body);
     assert(r2.text.includes('标题字数太多或太少。'));
 
     body.title = '这是一个大标题';
     const r4 = await app
       .httpRequest()
-      .post(`/topic/${topicId}/edit`)
+      .post(`/topic/${topic.id}/edit`)
       .send(body);
     assert(r4.text.includes('必须选择一个版块。'));
 
     body.tab = 'share';
     const r3 = await app
       .httpRequest()
-      .post(`/topic/${topicId}/edit`)
+      .post(`/topic/${topic.id}/edit`)
       .send(body);
     assert(r3.text.includes('内容不可为空。'));
 
     body.content = 'hi';
     await app
       .httpRequest()
-      .post(`/topic/${topicId}/edit`)
+      .post(`/topic/${topic.id}/edit`)
       .send(body)
       .expect(302);
   });
 
   it('should POST /topic/collect ok', async () => {
-    mockUser();
+    mockUser(user);
     const result1 = await app
       .httpRequest()
       .post('/topic/collect')
       .send({
-        topic_id: objectId,
+        topic_id: 0,
       });
 
     assert(JSON.parse(result1.text).status === 'failed');
@@ -239,7 +222,7 @@ describe('test/app/controller/topic.test.js', () => {
       .httpRequest()
       .post('/topic/collect')
       .send({
-        topic_id: topicId,
+        topic_id: topic.id,
       })
       .expect(200);
 
@@ -247,28 +230,28 @@ describe('test/app/controller/topic.test.js', () => {
       .httpRequest()
       .post('/topic/collect')
       .send({
-        topic_id: topicId,
+        topic_id: topic.id,
       });
 
     assert(JSON.parse(result2.text).status === 'failed');
   });
 
   it('should POST /topic/de_collect ok', async () => {
-    fakeUser();
+    mockUser(fakeUser);
     const result1 = await app
       .httpRequest()
       .post('/topic/de_collect')
       .send({
-        topic_id: topicId,
+        topic_id: topic.id,
       });
     assert(JSON.parse(result1.text).status === 'failed');
 
-    mockUser();
+    mockUser(user);
     const result2 = await app
       .httpRequest()
       .post('/topic/de_collect')
       .send({
-        topic_id: objectId,
+        topic_id: 0,
       });
     assert(JSON.parse(result2.text).status === 'failed');
 
@@ -276,35 +259,34 @@ describe('test/app/controller/topic.test.js', () => {
       .httpRequest()
       .post('/topic/de_collect')
       .send({
-        topic_id: topicId,
+        topic_id: topic.id,
       })
       .expect(200);
   });
 
   it('should POST /topic/:tid/delete ok', async () => {
-    fakeUser();
-    await app.httpRequest().post(`/topic/${topicId}/delete`).expect(403);
-    mockUser();
-    await app.httpRequest().post(`/topic/${topicId}/delete`).expect(200);
+    mockUser(fakeUser);
+    await app.httpRequest().post(`/topic/${topic.id}/delete`).expect(403);
+    mockUser(user);
+    await app.httpRequest().post(`/topic/${topic.id}/delete`).expect(200);
     await app.httpRequest().post(`/topic/${objectId}/delete`).expect(422);
   });
 
-  it('should POST /upload ok', async () => {
-    const file = path.resolve(__dirname, '../../../app/public/images/logo.png');
-    mockUser();
-    await app
-      .httpRequest()
-      .post('/upload')
-      .attach('logo', file)
-      .expect(200);
-  });
-
-  it('should POST /upload forbidden', async () => {
+  it('should POST /upload > ok with user access', async () => {
+    app.mockCsrf();
     const file = path.resolve(__dirname, '../../../app/public/images/logo.png');
     await app
       .httpRequest()
       .post('/upload')
       .attach('logo', file)
       .expect(403);
+    console.log('403 ok');
+    mockUser(user);
+    await app
+      .httpRequest()
+      .post('/upload')
+      .attach('logo', file)
+      .expect(200);
   });
+
 });

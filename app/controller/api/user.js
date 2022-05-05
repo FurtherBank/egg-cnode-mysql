@@ -15,12 +15,11 @@ class UserController extends Controller {
       return;
     }
 
-    const userId = user._id;
-    const topics = await ctx.service.topic.getTopicsByQuery({ author_id: userId });
-    const returnUser = _.pick(user, [ 'loginname', 'avatar_url', 'githubUsername', 'create_at', 'score' ]);
+    const topics = await ctx.service.topic.getTopicsByQuery({ author_id: loginname });
+    const returnUser = _.pick(user, [ 'loginname', 'avatar_url', 'githubUsername', 'createdAt', 'score' ]);
     const returnTopics = topics.map(topic => {
       return {
-        id: topic._id,
+        id: topic.id,
         last_reply_at: topic.last_reply_at,
         title: topic.title,
         author: {
@@ -43,7 +42,7 @@ class UserController extends Controller {
     ctx.body = {
       success: true,
       loginname: user.loginname,
-      id: user._id,
+      id: user.loginname,
       avatar_url: user.avatar_url,
     };
   }

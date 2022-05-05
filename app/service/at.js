@@ -40,28 +40,27 @@ class AtService extends Service {
     ];
   }
 
-  /*
+  /**
    * 根据文本内容中读取用户，并发送消息给提到的用户
    * @param {String} text 文本内容
    * @param {String} topicId 主题ID
    * @param {String} authorId 作者ID
-   * @param {String} type 回复类型
    * @param {String} reply_id 回复ID
    */
   async sendMessageToMentionUsers(text, topicId, authorId, reply_id = null) {
     let users = await this.service.user.getUsersByNames(this.fetchUsers(text));
 
     users = users.filter(user => {
-      return !user._id.equals(authorId);
+      return user.loginname !== authorId;
     });
 
     return Promise.all(
       users.map(user => {
-        return this.service.message.sendAtMessage(
-          user._id,
+        return this.service.message.sendMessage('at',
+          user.loginname,
           authorId,
-          topicId,
-          reply_id
+          parseInt(topicId),
+          parseInt(reply_id)
         );
       })
     );

@@ -1,0 +1,23 @@
+{
+  "development": {
+    "username": "root",
+    "password": "secret",
+    "database": "egg-sequelize-cnode-default",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  },
+  "test": {
+    "username": "root",
+    "password": "secret",
+    "database": "egg-sequelize-cnode-test",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  },
+  "production": {
+    "username": "root",
+    "password": "secret",
+    "database": "egg-sequelize-cnode-production",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  }
+}

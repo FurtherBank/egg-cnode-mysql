@@ -5,19 +5,19 @@ const Controller = require('egg').Controller;
 class MessageController extends Controller {
   async count() {
     const { ctx } = this;
-    const userId = ctx.request.user._id;
+    const userId = ctx.request.user.loginname;
     const count = await ctx.service.message.getMessagesCount(userId);
     ctx.body = { count };
   }
 
   async markAll() {
     const { ctx } = this;
-    const userId = ctx.request.user._id;
+    const userId = ctx.request.user.loginname;
     const messages = await ctx.service.message.getUnreadMessagesByUserId(userId);
     const result = await ctx.service.message.updateMessagesToRead(userId, messages);
     ctx.body = {
       success: true,
-      marked_msgs: result ? messages.map(message => { return { id: message._id }; }) : [],
+      marked_msgs: result ? messages.map(message => { return { id: message.id }; }) : [],
     };
   }
 
@@ -34,7 +34,7 @@ class MessageController extends Controller {
 
   async list() {
     const { ctx } = this;
-    const userId = ctx.request.user._id;
+    const userId = ctx.request.user.loginname;
     const msgService = ctx.service.message;
     const mdrender = ctx.request.query.mdrender !== 'false';
 
@@ -44,26 +44,20 @@ class MessageController extends Controller {
       msgService.getUnreadMessagesByUserId(userId),
     ]);
 
-    // Use `Promise.all` to wrap all the sub promises together into a whole Promise<any[]>
-    const readMessagesPromises = Promise.all(readMessages.map(message => msgService.getMessageRelations(message)));
-    const unreadMessagesPromises = Promise.all(unreadMessages.map(message => msgService.getMessageRelations(message)));
-
-    let [ hasReadMessages, hasUnReadMessages ] = await Promise.all([ readMessagesPromises, unreadMessagesPromises ]);
-
     const formatMessage = message => {
       return {
-        id: message._id,
+        id: message.id,
         type: message.type,
         has_read: message.has_read,
-        create_at: message.create_at,
+        createdAt: message.createdAt,
         author: {
-          loginname: message.author.loginname,
-          avatar_url: message.author.avatar_url,
+          loginname: message.sender.loginname,
+          avatar_url: message.sender.avatar_url,
         },
         topic: {
-          id: message.topic.topic._id,
-          title: message.topic.topic.title,
-          last_reply_at: message.topic.topic.last_reply_at,
+          id: message.topic.id,
+          title: message.topic.title,
+          last_reply_at: message.topic.last_reply_at,
         },
         reply: message.reply ? {
           content: mdrender ? ctx.helper.markdown(message.reply.content) : message.reply.content,
@@ -71,8 +65,8 @@ class MessageController extends Controller {
       };
     };
 
-    hasReadMessages = hasReadMessages.map(message => formatMessage(message));
-    hasUnReadMessages = hasUnReadMessages.map(message => formatMessage(message));
+    const hasReadMessages = readMessages.map(message => formatMessage(message));
+    const hasUnReadMessages = unreadMessages.map(message => formatMessage(message));
 
     ctx.body = {
       success: true,

@@ -24,76 +24,82 @@ describe('test/app/service/message.test.js', () => {
     const title = 'first post';
     const content = 'hello world';
     const tab = 'share';
-    const topic = await ctx.service.topic.newAndSave(title, content, tab, user1._id);
-    topicId = topic._id;
+    const topic = await ctx.service.topic.newAndSave(title, content, tab, user1.loginname);
+    topicId = topic.id;
     assert(topic.title === title);
     assert(topic.content === content);
     assert(topic.tab === tab);
-    assert.equal(topic.author_id, user1._id);
+    assert.equal(topic.author_id, user1.loginname);
   });
 
   it('sendAtMessage should ok', async () => {
-    message = await messageService.sendAtMessage(user2._id, user1._id, topicId);
+    // at
+    message = await messageService.sendMessage('at', user2.loginname, user1.loginname, topicId);
     assert(message.type === 'at');
     assert(message.topic_id.toString() === topicId.toString());
-    assert(message.author_id === user1._id);
-    assert.equal(message.master_id.toString(), user2._id);
-  });
-
-  it('sendReplyMessage should ok', async () => {
-    const result = await messageService.sendReplyMessage(user2._id, user1._id, topicId);
+    assert(message.author_id === user1.loginname);
+    assert.equal(message.master_id.toString(), user2.loginname);
+    // reply
+    const result = await messageService.sendMessage('reply', user2.loginname, user1.loginname, topicId);
     assert(result.type === 'reply');
     assert(result.topic_id.toString() === topicId.toString());
-    assert(result.author_id === user1._id);
-    assert.equal(result.master_id.toString(), user2._id);
+    assert(result.author_id === user1.loginname);
+    assert.equal(result.master_id.toString(), user2.loginname);
+    // activate
+    const activateMessage = await messageService.sendActivateMessage(user2.loginname);
+    assert(activateMessage.type === 'activate');
+    assert.equal(activateMessage.master_id.toString(), user2.loginname);
+    // invalid
+    const invalid = await messageService.sendMessage('at', user2.loginname, 0, user1.loginname);
+    assert(invalid === null);
   });
 
+
   it('getMessagesCount should ok', async () => {
-    const result = await messageService.getMessagesCount(user2._id);
+    const result = await messageService.getMessagesCount(user2.loginname);
     assert(result >= 1);
   });
 
-  it('getMessageRelations should ok', async () => {
-    let result = await messageService.getMessageRelations(message);
-    assert(result.topic.topic._id.toString() === message.topic_id.toString());
-
-    const mockMessage1 = await messageService.sendAtMessage(user2._id, '565c4473d0bc14ae279399fe', user1._id);
-    result = await messageService.getMessageRelations(mockMessage1);
-    assert(result.is_invalid === true);
+  it('model.Message should ok', async () => {
+    const mockMessage1 = await messageService.sendMessage('at', user2.loginname, user1.loginname, 0);
+    assert(mockMessage1.is_invalid);
 
     message.type = 'at1';
-    result = await messageService.getMessageRelations(message);
-    assert(result.is_invalid === true);
+    assert(message.is_invalid === true);
+    message.type = 'at';
+    assert(message.is_invalid === false);
   });
 
   it('getMessageById should ok', async () => {
-    const result = await messageService.getMessageById(message._id);
-    assert(result._id.toString() === message._id.toString());
+    const result = await messageService.getMessageById(message.id);
+    assert(result.id === message.id);
+    assert(result.topic.id === message.topic_id);
+
   });
 
   it('getReadMessagesByUserId should ok', async () => {
-    const result = await messageService.getReadMessagesByUserId(user2._id);
+    const result = await messageService.getReadMessagesByUserId(user2.loginname);
     assert(result.length === 0);
   });
 
   it('getUnreadMessagesByUserId should ok', async () => {
-    const result = await messageService.getUnreadMessagesByUserId(user2._id);
+    const result = await messageService.getUnreadMessagesByUserId(user2.loginname);
     assert(result.length >= 1);
   });
 
   it('updateMessagesToRead should ok', async () => {
-    let result = await messageService.updateMessagesToRead(user2._id, []);
+    let result = await messageService.updateMessagesToRead(user2.loginname, []);
     assert(result === undefined);
 
-    result = await messageService.updateMessagesToRead(user2._id, [ message ]);
-    assert(result.ok === 1);
+    result = await messageService.updateMessagesToRead(user2.loginname, [ message ]);
+    assert(result[0]);
   });
 
   it('updateOneMessageToRead should ok', async () => {
-    const message = await messageService.sendAtMessage(user2._id, topicId, user1._id);
     let result = await messageService.updateOneMessageToRead();
     assert(result === undefined);
-    result = await messageService.updateOneMessageToRead(message._id);
-    assert(result.ok === 1);
+    await message.update({ has_read: false });
+    result = await messageService.updateOneMessageToRead(message.id);
+    assert(result === 1);
   });
 });

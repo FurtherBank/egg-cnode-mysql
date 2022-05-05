@@ -1,26 +1,52 @@
 'use strict';
 
 module.exports = app => {
-  const mongoose = app.mongoose;
-  const Schema = mongoose.Schema;
-  const ObjectId = Schema.ObjectId;
+  const { INTEGER, STRING, BOOLEAN } = app.Sequelize;
 
-  const ReplySchema = new Schema({
-    content: { type: String },
-    topic_id: { type: ObjectId },
-    author_id: { type: ObjectId },
-    reply_id: { type: ObjectId },
-    create_at: { type: Date, default: Date.now },
-    update_at: { type: Date, default: Date.now },
-    content_is_html: { type: Boolean },
-    ups: [ Schema.Types.ObjectId ],
-    deleted: { type: Boolean, default: false },
+  const Reply = app.model.define('reply', {
+    id: { type: INTEGER, primaryKey: true, autoIncrement: true },
+    author_id: { type: STRING(30) },
+    topic_id: { type: INTEGER },
+    reply_id: { type: INTEGER }, // 二级回复挂载的一级回复的 id
+    content: { type: STRING(2000) },
+    content_is_html: { type: BOOLEAN, defaultValue: false },
+    deleted: { type: BOOLEAN, defaultValue: false },
   }, {
-    usePushEach: true,
+    indexes: [
+      {
+        fields: [
+          'topic_id',
+        ],
+      },
+      {
+        fields: [
+          'author_id',
+          'created_at',
+        ],
+      },
+    ],
   });
 
-  ReplySchema.index({ topic_id: 1 });
-  ReplySchema.index({ author_id: 1, create_at: -1 });
+  Reply.associate = function() {
+    app.model.Reply.belongsTo(app.model.User, {
+      as: 'author', // 在 reply 视角下，另一个模型的别名
+      foreignKey: 'author_id',
+      onDelete: 'CASCADE',
+    });
+    app.model.Reply.belongsToMany(app.model.User, {
+      as: 'upers', // 在 reply 视角下，这个联系的别名，会将值放在自己字段上
+      through: app.model.ReplyUp,
+      foreignKey: 'reply_id',
+    });
+    app.model.Reply.belongsTo(app.model.Reply, {
+      as: 'mountedReply',
+      foreignKey: 'reply_id',
+      onDelete: 'CASCADE',
+    }); // 二级回复挂在哪一个回复上
+    app.model.Reply.belongsTo(app.model.Topic, {
+      foreignKey: 'topic_id',
+    });
+  };
 
-  return mongoose.model('Reply', ReplySchema);
+  return Reply;
 };

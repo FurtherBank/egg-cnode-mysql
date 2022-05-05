@@ -1,32 +1,58 @@
 'use strict';
 
 module.exports = app => {
-  const mongoose = app.mongoose;
-  const Schema = mongoose.Schema;
-  const ObjectId = Schema.ObjectId;
+  const { INTEGER, STRING, DATE, NOW, BOOLEAN } = app.Sequelize;
 
-  const TopicSchema = new Schema({
-    title: { type: String },
-    content: { type: String },
-    author_id: { type: ObjectId },
-    top: { type: Boolean, default: false }, // 置顶帖
-    good: { type: Boolean, default: false }, // 精华帖
-    lock: { type: Boolean, default: false }, // 被锁定主题
-    reply_count: { type: Number, default: 0 },
-    visit_count: { type: Number, default: 0 },
-    collect_count: { type: Number, default: 0 },
-    create_at: { type: Date, default: Date.now },
-    update_at: { type: Date, default: Date.now },
-    last_reply: { type: ObjectId },
-    last_reply_at: { type: Date, default: Date.now },
-    content_is_html: { type: Boolean },
-    tab: { type: String },
-    deleted: { type: Boolean, default: false },
+  const Topic = app.model.define('topic', {
+    id: { type: INTEGER, primaryKey: true, autoIncrement: true },
+    title: { type: STRING },
+    content: { type: STRING(2000) },
+    author_id: { type: STRING(30) }, // 作者的loginname,外码通过联系指定
+    top: { type: BOOLEAN, defaultValue: false }, // 置顶帖
+    good: { type: BOOLEAN, defaultValue: false }, // 精华帖
+    lock: { type: BOOLEAN, defaultValue: false }, // 被锁定主题
+    reply_count: { type: INTEGER, defaultValue: 0 },
+    visit_count: { type: INTEGER, defaultValue: 0 },
+    last_reply: { type: INTEGER }, // 最后的 reply 的 id
+    last_reply_at: { type: DATE, defaultValue: NOW }, // 最后的 reply 的时间
+    content_is_html: { type: BOOLEAN, defaultValue: false }, // 内容是否为 html，这个没有说明大用处
+    tab: { type: STRING(30) }, // 话题标签：share 分享, ask 问答, job 招聘
+    deleted: { type: BOOLEAN, defaultValue: false },
+  }, {
+    indexes: [
+      {
+        fields: [
+          'created_at',
+        ],
+      },
+      {
+        fields: [
+          'top',
+          'last_reply_at',
+        ],
+      },
+      {
+        fields: [
+          'author_id',
+          'created_at',
+        ],
+      },
+    ],
   });
 
-  TopicSchema.index({ create_at: -1 });
-  TopicSchema.index({ top: -1, last_reply_at: -1 });
-  TopicSchema.index({ author_id: 1, create_at: -1 });
+  Topic.associate = function() {
+    app.model.Topic.belongsTo(app.model.User, {
+      as: 'author',
+      foreignKey: 'author_id',
+    });
+    app.model.Topic.belongsToMany(app.model.User, {
+      as: 'collectedUsers',
+      foreignKey: 'topic_id',
+      through: app.model.TopicCollect,
+    });
+    app.model.Topic.hasMany(app.model.Reply);
+    app.model.Topic.hasMany(app.model.Message);
+  };
 
-  return mongoose.model('Topic', TopicSchema);
+  return Topic;
 };

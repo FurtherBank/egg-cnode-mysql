@@ -3,14 +3,22 @@
 const Controller = require('egg').Controller;
 const _ = require('lodash');
 
+const MongoObjectIdSchema = {
+  type: 'string',
+  format: /^[0-9]+$/i,
+  max: 10,
+};
+
 class TopicController extends Controller {
   async index(ctx) {
+    const s = ctx.app.Sequelize;
+    const { notIn } = s.Op;
     const tab = ctx.query.tab || 'all';
     const mdrender = ctx.query.mdrender !== 'false';
 
     const query = {};
     if (!tab || tab === 'all') {
-      query.tab = { $nin: [ 'job', 'dev' ] };
+      query.tab = { [notIn]: [ 'job', 'dev' ] };
     } else {
       if (tab === 'good') {
         query.good = true;
@@ -20,14 +28,13 @@ class TopicController extends Controller {
     }
 
     let topics = await ctx.service.topic.getTopicsByQuery(query,
-      // TODO 修改 eslint 支持在 {} 内使用 ...，栗子：{ sort: '-top -last_reply_at', ...ctx.pagination }
-      Object.assign({ sort: '-top -last_reply_at' }, ctx.pagination));
+      // TODO 修改 eslint 支持在 {} 内使用 ...，栗子：{ order: [[ 'last_reply_at', 'DESC' ]], ...ctx.pagination }
+      Object.assign({ order: [[ 'last_reply_at', 'DESC' ]] }, ctx.pagination));
     topics = topics.map(topic => {
       topic.content = mdrender ? ctx.helper.markdown(topic.content) : topic.content;
       topic.author = _.pick(topic.author, [ 'loginname', 'avatar_url' ]);
-      topic.id = topic._id;
       return _.pick(topic, [ 'id', 'author_id', 'tab', 'content', 'title', 'last_reply_at',
-        'good', 'top', 'reply_count', 'visit_count', 'create_at', 'author' ]);
+        'good', 'top', 'reply_count', 'visit_count', 'createdAt', 'author' ]);
     });
 
     ctx.body = {
@@ -59,7 +66,7 @@ class TopicController extends Controller {
       body.title,
       body.content,
       body.tab,
-      ctx.request.user.id
+      ctx.request.user.loginname // #!!!
     );
 
     // 发帖用户增加积分,增加发表主题数量
@@ -69,7 +76,7 @@ class TopicController extends Controller {
     await ctx.service.at.sendMessageToMentionUsers(
       body.content,
       topic.id,
-      ctx.request.user.id
+      ctx.request.user.loginname // #!!!
     );
 
     ctx.body = {
@@ -80,18 +87,14 @@ class TopicController extends Controller {
 
   async show(ctx) {
     ctx.validate({
-      id: {
-        type: 'string',
-        max: 24,
-        min: 24,
-      },
+      id: MongoObjectIdSchema,
     }, ctx.params);
 
-    const topic_id = String(ctx.params.id);
+    const topic_id = parseInt(ctx.params.id);
     const mdrender = ctx.query.mdrender !== 'false';
     const user = await ctx.service.user.getUserByToken(ctx.query.accesstoken);
 
-    let [ topic, author, replies ] = await ctx.service.topic.getFullTopic(topic_id);
+    let topic = await ctx.service.topic.getFullTopic(topic_id);
 
     if (!topic) {
       ctx.status = 404;
@@ -102,35 +105,24 @@ class TopicController extends Controller {
       return;
     }
 
-    // 增加 visit_count
-    topic.visit_count += 1;
-    // 写入 DB
+    // 数据库更新访问数
     await ctx.service.topic.incrementVisitCount(topic_id);
 
     topic.content = mdrender ? ctx.helper.markdown(topic.content) : topic.content;
-    topic.id = topic._id;
     topic = _.pick(topic, [ 'id', 'author_id', 'tab', 'content', 'title', 'last_reply_at',
-      'good', 'top', 'reply_count', 'visit_count', 'create_at', 'author' ]);
-
-    topic.author = _.pick(author, [ 'loginname', 'avatar_url' ]);
-
-    topic.replies = replies.map(reply => {
+      'good', 'top', 'reply_count', 'visit_count', 'createdAt', 'author', 'replies' ]);
+    topic.author = _.pick(topic.author, [ 'loginname', 'avatar_url' ]);
+    topic.replies = topic.replies.map(reply => {
       reply.content = mdrender ? ctx.helper.markdown(reply.content) : reply.content;
-
       reply.author = _.pick(reply.author, [ 'loginname', 'avatar_url' ]);
-      reply.id = reply._id;
-      reply = _.pick(reply, [ 'id', 'author', 'content', 'ups', 'create_at', 'reply_id' ]);
+      reply = _.pick(reply, [ 'id', 'author', 'content', 'upers', 'createdAt', 'reply_id' ]);
       reply.reply_id = reply.reply_id || null;
-
-      reply.is_uped = !!(reply.ups && user && reply.ups.indexOf(user.id) !== -1);
+      reply.is_uped = !!(reply.upers && user && reply.upers.find(uper => user.loginname === uper.loginname)); // #!!!
 
       return reply;
     });
 
-    topic.is_collect = user ? !!await ctx.service.topicCollect.getTopicCollect(
-      user.id,
-      topic_id
-    ) : false;
+    topic.is_collect = user ? !!user.collectedTopics.find(topicCollection => topic.id === topicCollection.id) : false;
 
     ctx.body = {
       success: true,
@@ -146,9 +138,8 @@ class TopicController extends Controller {
 
     ctx.validate({
       topic_id: {
-        type: 'string',
-        max: 24,
-        min: 24,
+        type: 'number',
+        min: 0,
       },
       title: {
         type: 'string',
@@ -168,7 +159,7 @@ class TopicController extends Controller {
       return;
     }
 
-    if (!topic.author_id.equals(ctx.request.user._id) && !ctx.request.is_admin) {
+    if (topic.author_id !== ctx.request.user.loginname && !ctx.request.is_admin) {
       ctx.status = 403;
       ctx.body = {
         success: false,
@@ -179,7 +170,7 @@ class TopicController extends Controller {
 
     delete body.accesstoken;
     topic = Object.assign(topic, body);
-    topic.update_at = new Date();
+    topic.updatedAt = new Date();
 
     await topic.save();
 
@@ -187,7 +178,7 @@ class TopicController extends Controller {
     await ctx.service.at.sendMessageToMentionUsers(
       topic.content,
       topic.id,
-      ctx.request.user.id
+      ctx.request.user.loginname // #!!!
     );
 
     ctx.body = {

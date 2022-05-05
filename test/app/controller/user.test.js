@@ -3,26 +3,24 @@
 const { app, assert } = require('egg-mock/bootstrap');
 
 describe('test/app/controller/user.test.js', () => {
-  let loginname;
-  let email;
+  const loginname = `user_loginname_${Date.now()}`;
+  const email = `${loginname}@test.com`;
   let user;
   let ctx;
 
   before(async function() {
     ctx = app.mockContext();
-    loginname = `user_loginname_${Date.now()}`;
-    email = `${loginname}@test.com`;
     user = await ctx.service.user.newAndSave('name', loginname, ctx.helper.bhash('pass'), email, 'avatar_url', 'active');
     assert(user.loginname === loginname);
   });
 
   describe('- Index', () => {
     it('should GET /user ok', async () => {
-      app.mockContext({ user: { is_admin: true } });
+      app.mockContext({ user: { is_admin: true, active: true } });
       user.url = 'test_url';
       await user.save();
-      const topic = await ctx.service.topic.newAndSave('title', 'content', 'share', user._id);
-      await ctx.service.reply.newAndSave('content', topic._id, user._id);
+      const topic = await ctx.service.topic.newAndSave('title', 'content', 'share', user.loginname);
+      await ctx.service.reply.newAndSave('content', topic.id, user.loginname);
 
       const r1 = await app.httpRequest().get('/user');
       assert(r1.status === 404);
@@ -35,9 +33,9 @@ describe('test/app/controller/user.test.js', () => {
       const res = await app.httpRequest().get(`/user/${loginname}`);
       assert(res.status === 200);
       assert(/<img src="([^"]+)" title=/g.exec(res.text)[1] === user.avatar);
-      assert(/<a class="dark">([^"]+)<\/a>/g.exec(res.text)[1] === user.loginname);
-      assert(/<span class="big">([^"]+)<\/span> 积分/g.exec(res.text)[1] === user.score.toString());
-      assert(/“([\S\s]+)”/g.exec(res.text)[1].replace(/[\t\s]+/g, '') === '这家伙很懒，什么个性签名都没有留下。');
+      assert(/<a class="dark">([^"]+)<\/a>/g.exec(res.text)[1].indexOf(user.loginname) >= 0);
+      assert(/<span class="big">([^"]+)<\/span> 积分/g.exec(res.text)[1].indexOf(user.score.toString()) >= 0);
+      assert(/“([\S\s]+)”/g.exec(res.text)[1].includes('这家伙很懒，什么个性签名都没有留下。'));
 
       user.url = 'http://test_url.com';
       await user.save();
@@ -87,7 +85,7 @@ describe('test/app/controller/user.test.js', () => {
       assert(res.status === 302);
       assert(res.headers.location === '/setting?save=success');
 
-      const savedUser = await ctx.service.user.getUserById(user._id);
+      const savedUser = await ctx.service.user.getUserByLoginName(user.loginname);
       Object.keys(body).forEach(item => {
         assert(savedUser[item] === body[item]);
       });
@@ -128,7 +126,7 @@ describe('test/app/controller/user.test.js', () => {
         });
       assert(res3.status === 200);
 
-      const savedUser = await ctx.service.user.getUserById(user._id);
+      const savedUser = await ctx.service.user.getUserByLoginName(user.loginname);
       const equal = ctx.helper.bcompare('newpass', savedUser.pass);
       assert(equal === true);
     });
@@ -152,7 +150,7 @@ describe('test/app/controller/user.test.js', () => {
       // if (!admin) {
       //   admin = await ctx.service.user.newAndSave(adminName, adminName, 'pass', 'admin@test.com', 'u', 'active');
       // }
-      // const auth_token = admin._id + '$$$$';
+      // const auth_token = admin.id + '$$$$';
       // app.mockCookies({ [app.config.auth_cookie_name]: auth_token });
 
       user.is_admin = true;
@@ -162,7 +160,7 @@ describe('test/app/controller/user.test.js', () => {
         .send(body);
       assert(res.status === 200);
       assert(res.body.status === 'success');
-      return await ctx.service.user.getUserById(user._id);
+      return ctx.service.user.getUserByLoginName(user.loginname);
     }
 
     it('should POST /passport/local set cookies', async () => {
@@ -171,7 +169,7 @@ describe('test/app/controller/user.test.js', () => {
       assert(login.status === 302);
       const cookies = login.headers['set-cookie'];
       const authUser = cookies.find(c => c.indexOf('$$$$') > -1);
-      assert(/=([^$]+)\$/g.exec(authUser)[1] === user._id.toString());
+      assert(/=([^$]+)\$/g.exec(authUser)[1] === user.accessToken.toString()); // TypeError: Cannot read property '1' of null
       assert(login.headers.location === '/');
 
       const login1 = await app.httpRequest().post('/passport/local')
@@ -194,7 +192,7 @@ describe('test/app/controller/user.test.js', () => {
       const login4 = await app.httpRequest().post('/passport/local')
         .send({ name: user.loginname, pass: 'newpass' });
       assert(login4.status === 302);
-      assert(login4.headers.location === '/signin');
+      assert(login4.headers.location === '/'); // 这里改了：未激活还可以正常登录，但是没有用户权限
     });
 
     it('should GET /passport/github redirect to auth url', async () => {
@@ -220,12 +218,12 @@ describe('test/app/controller/user.test.js', () => {
 
 
     it('should POST /user/set_star ok', async () => {
-      const res = await handleAdminPost('/user/set_star', { user_id: user._id });
+      const res = await handleAdminPost('/user/set_star', { user_id: user.loginname });
       assert(res.is_star === true);
     });
 
     it('should POST /user/cancel_star ok', async () => {
-      const result = await handleAdminPost('/user/cancel_star', { user_id: user._id });
+      const result = await handleAdminPost('/user/cancel_star', { user_id: user.loginname });
       assert(result.is_star === false);
     });
 
@@ -276,8 +274,8 @@ describe('test/app/controller/user.test.js', () => {
       assert(noExistedUser.status === 404);
       assert(/<strong>([\S\s]+)<\/strong>/g.exec(noExistedUser.text)[1] === '这个用户不存在。');
 
-      const topic = await ctx.service.topic.newAndSave('title', 'content', 'share', user._id);
-      await ctx.service.topicCollect.newAndSave(user._id, topic._id);
+      const topic = await ctx.service.topic.newAndSave('title', 'content', 'share', user.loginname);
+      await user.addCollectedTopic(topic);
       const res = await app.httpRequest().get(`/user/${user.loginname}/collections`);
       assert(res.status = 200);
     });
@@ -294,8 +292,8 @@ describe('test/app/controller/user.test.js', () => {
       assert(noExistedUser.status === 404);
       assert(/<strong>([\S\s]+)<\/strong>/g.exec(noExistedUser.text)[1] === '这个用户不存在。');
 
-      const topic = await ctx.service.topic.newAndSave('title', 'content', 'share', user._id);
-      await ctx.service.reply.newAndSave('content', topic._id, user._id);
+      const topic = await ctx.service.topic.newAndSave('title', 'content', 'share', user.loginname);
+      await ctx.service.reply.newAndSave('content', topic.id, user.loginname);
       const res = await app.httpRequest().get(`/user/${user.loginname}/replies`);
       assert(res.status === 200);
     });

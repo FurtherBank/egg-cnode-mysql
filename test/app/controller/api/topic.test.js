@@ -13,28 +13,23 @@ describe('test/app/controller/api/topic.test.js', () => {
 
     async function newAndSaveUser(loginname) {
       const email = `${loginname}@test.com`;
-      return await ctx.service.user.newAndSave('name', loginname, ctx.helper.bhash('pass'), email, 'avatar_url', 'active');
+      return ctx.service.user.newAndSave('name', loginname, ctx.helper.bhash('pass'), email, 'avatar_url', 'active');
     }
 
     user = await newAndSaveUser(`user_loginname_${Date.now()}`);
 
-    topic = await ctx.service.topic.newAndSave(
-      'title',
-      'content',
-      'share',
-      user.id
-    );
+    topic = await user.createTopic({
+      title: 'title',
+      content: 'content',
+      tab: 'share',
+    });
 
-    await ctx.service.topicCollect.newAndSave(
-      user.id,
-      topic.id
-    );
+    await user.addCollectedTopic(topic);
 
-    replyUser = await newAndSaveUser(`reply_user_loginname_${Date.now()}`);
+    replyUser = await newAndSaveUser(`reply_username_${Date.now()}`);
 
-    const reply = await ctx.service.reply.newAndSave('reply', topic._id, replyUser.id);
-    reply.ups.push(user.id);
-    await reply.save();
+    const reply = await ctx.service.reply.newAndSave('reply', topic.id, replyUser.loginname);
+    await reply.addUper(user);
   });
 
   it('post /api/v1/topics should ok', async () => {
@@ -68,7 +63,7 @@ describe('test/app/controller/api/topic.test.js', () => {
       .post('/api/v1/topics/update')
       .send({
         accesstoken: user.accessToken,
-        topic_id: '012345678901234567890123',
+        topic_id: 0,
         title: 'update title',
         tab: 'share',
         content: 'update title',
@@ -121,7 +116,7 @@ describe('test/app/controller/api/topic.test.js', () => {
 
   it('get /topic/:id should 404', async () => {
     await app.httpRequest()
-      .get('/api/v1/topic/012345678901234567890123')
+      .get('/api/v1/topic/0')
       .expect(404);
   });
 

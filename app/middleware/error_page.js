@@ -7,7 +7,8 @@ module.exports = () => {
     await next();
     if ((status.indexOf(ctx.status) > -1) && !ctx.body) {
       const { message } = ctx;
-      ctx.status = ctx.status;
+      const status = ctx.status;
+      ctx.status = status;
       if (ctx.acceptJSON) {
         ctx.body = { error: 'Not Found' };
       } else {

@@ -5,7 +5,7 @@ const { app, assert } = require('egg-mock/bootstrap');
 async function createUser(name) {
   const ctx = app.mockContext();
   const loginname = `${name}_${Date.now()}`;
-  return await ctx.service.user.newAndSave(name, loginname, 'pass', `${loginname}@test.com`, 'avatar_url', 'active');
+  return ctx.service.user.newAndSave(name, loginname, 'pass', `${loginname}@test.com`, 'avatar_url', 'active');
 }
 
 describe('test/app/controller/api/reply.test.js', () => {
@@ -27,12 +27,12 @@ describe('test/app/controller/api/reply.test.js', () => {
     const content = 'reply test topic';
     const tab = 'share';
 
-    topic = await ctx.service.topic.newAndSave(title, content, tab, author.id);
+    topic = await ctx.service.topic.newAndSave(title, content, tab, author.loginname);
 
     assert(topic.title === title);
     assert(topic.content === content);
     assert(topic.tab === tab);
-    assert.equal(topic.author_id, author.id);
+    assert.equal(topic.author_id, author.loginname);
   });
 
   describe('/api/v1/topic/:topic_id/replies', () => {
@@ -46,8 +46,8 @@ describe('test/app/controller/api/reply.test.js', () => {
         if (
           message.type === type &&
           message.master_id.toString() === receiverId &&
-          message.topic_id.toString() === topic.id &&
-          message.reply_id.toString() === replyId &&
+          message.topic_id === topic.id &&
+          message.reply_id === replyId &&
           message.author_id.toString() === senderId
         ) {
           valid = true;
@@ -66,12 +66,12 @@ describe('test/app/controller/api/reply.test.js', () => {
         })
         .expect(200);
 
-      await checkMessage('reply', user1.id, author.id, resp.body.reply_id);
+      await checkMessage('reply', user1.loginname, author.loginname, resp.body.reply_id);
     });
 
     it('post should 404 when topic is not found', async () => {
       const { body } = await app.httpRequest()
-        .post('/api/v1/topic/012345678901234567890123/replies')
+        .post('/api/v1/topic/123456/replies')
         .send({
           content: 'no content',
           accesstoken: user1.accessToken,
@@ -140,7 +140,7 @@ describe('test/app/controller/api/reply.test.js', () => {
 
       const replyId = resp.body.reply_id;
 
-      await checkMessage('at', user2.id, user1.id, replyId);
+      await checkMessage('at', user2.loginname, user1.loginname, replyId);
     });
 
     it('post should ok when at author only send reply message', async () => {
@@ -153,8 +153,8 @@ describe('test/app/controller/api/reply.test.js', () => {
         })
         .expect(200);
 
-      await checkMessage('reply', user1.id, author.id, resp.body.reply_id);
-      await checkMessage('at', user1.id, author.id, resp.body.reply_id, true);
+      await checkMessage('reply', user1.loginname, author.loginname, resp.body.reply_id);
+      await checkMessage('at', user1.loginname, author.loginname, resp.body.reply_id, true);
     });
 
     it('post should ok when author reply self topic do not send message', async () => {
@@ -167,7 +167,7 @@ describe('test/app/controller/api/reply.test.js', () => {
         })
         .expect(200);
 
-      await checkMessage('reply', author.id, author.id, resp.body.reply_id, true);
+      await checkMessage('reply', author.loginname, author.loginname, resp.body.reply_id, true);
     });
   });
 
@@ -186,15 +186,17 @@ describe('test/app/controller/api/reply.test.js', () => {
 
     async function checkReplyUps(replyId, userId, status) {
       const ctx = app.mockContext();
-      const reply = await ctx.service.reply.getReplyById(replyId);
-      const ups = reply.ups;
-      assert((ups.indexOf(userId) !== -1) === status);
+      const reply = await ctx.service.reply.getReply(replyId);
+      const upers = reply.upers;
+      assert(!!(upers.find(user => {
+        return user.loginname === userId;
+      })) === status);
     }
 
     it('post should ok when up reply', async () => {
       const replyId = await postReply();
 
-      await checkReplyUps(replyId, user2.id, false);
+      await checkReplyUps(replyId, user2.loginname, false);
 
       await app.httpRequest()
         .post(`/api/v1/reply/${replyId}/ups`)
@@ -203,13 +205,13 @@ describe('test/app/controller/api/reply.test.js', () => {
         })
         .expect(200);
 
-      await checkReplyUps(replyId, user2.id, true);
+      await checkReplyUps(replyId, user2.loginname, true);
     });
 
     it('post should ok when de-up reply', async () => {
       const replyId = await postReply();
 
-      await checkReplyUps(replyId, user2.id, false);
+      await checkReplyUps(replyId, user2.loginname, false);
 
       await app.httpRequest()
         .post(`/api/v1/reply/${replyId}/ups`)
@@ -218,7 +220,7 @@ describe('test/app/controller/api/reply.test.js', () => {
         })
         .expect(200);
 
-      await checkReplyUps(replyId, user2.id, true);
+      await checkReplyUps(replyId, user2.loginname, true);
 
       await app.httpRequest()
         .post(`/api/v1/reply/${replyId}/ups`)
@@ -227,7 +229,7 @@ describe('test/app/controller/api/reply.test.js', () => {
         })
         .expect(200);
 
-      await checkReplyUps(replyId, user2.id, false);
+      await checkReplyUps(replyId, user2.loginname, false);
     });
 
     it('post should 401 when no accesstoken', async () => {
@@ -241,14 +243,14 @@ describe('test/app/controller/api/reply.test.js', () => {
 
     it('post should 404 when reply is not found', async () => {
       await app.httpRequest()
-        .post('/api/v1/reply/012345678901234567890123/ups')
+        .post('/api/v1/reply/123456/ups')
         .send({
           accesstoken: user2.accessToken,
         })
         .expect(404);
     });
 
-    it('post should 403 when you ups your reply', async () => {
+    it('post should 403 when you upers your reply', async () => {
       const replyId = await postReply();
       await app.httpRequest()
         .post(`/api/v1/reply/${replyId}/ups`)

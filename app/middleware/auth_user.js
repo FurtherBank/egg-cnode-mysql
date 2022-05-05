@@ -17,10 +17,10 @@ module.exports = () => {
     const { user } = ctx;
 
     if (!user) {
-      return await next();
+      return next();
     }
 
-    const count = await ctx.service.message.getMessagesCount(user._id);
+    const count = await ctx.service.message.getMessagesCount(user.loginname);
     user.messages_count = count;
     ctx.locals.current_user = user;
     await next();

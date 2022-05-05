@@ -24,15 +24,15 @@ describe('test/app/controller/api/message.test.js', () => {
     const title = 'first post';
     const content = 'hello world';
     const tab = 'share';
-    const topic = await ctx.service.topic.newAndSave(title, content, tab, user1._id);
-    topicId = topic._id;
+    const topic = await ctx.service.topic.newAndSave(title, content, tab, user1.loginname);
+    topicId = topic.id;
     assert(topic.title === title);
     assert(topic.content === content);
     assert(topic.tab === tab);
-    assert.equal(topic.author_id, user1._id);
+    assert.equal(topic.author_id, user1.loginname);
 
-    const message = await ctx.service.message.sendAtMessage(user2._id, user1._id, topicId);
-    messageId = message._id;
+    const message = await ctx.service.message.sendMessage('at', user2.loginname, user1.loginname, topicId);
+    messageId = message.id;
   });
 
   it('get /message/count should ok', async () => {

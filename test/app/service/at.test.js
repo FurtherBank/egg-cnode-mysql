@@ -23,16 +23,16 @@ describe('test/app/service/at.test.js', () => {
     const title = 'first post';
     const content = 'hello world';
     const tab = 'share';
-    const topic = await ctx.service.topic.newAndSave(title, content, tab, user1._id);
-    topicId = topic._id;
+    const topic = await ctx.service.topic.newAndSave(title, content, tab, user1.loginname);
+    topicId = topic.id;
     assert(topic.title === title);
     assert(topic.content === content);
     assert(topic.tab === tab);
-    assert.equal(topic.author_id, user1._id);
+    assert.equal(topic.author_id, user1.loginname);
 
-    const reply = await ctx.service.reply.newAndSave('hi', topicId, user1._id);
+    const reply = await ctx.service.reply.newAndSave('hi', topicId, user1.loginname);
     assert(reply.content === 'hi');
-    assert(reply.author_id === user1._id);
+    assert(reply.author_id === user1.loginname);
     assert(reply.topic_id === topicId);
   });
 
@@ -45,11 +45,11 @@ describe('test/app/service/at.test.js', () => {
   });
 
   it('sendMessageToMentionUsers should ok', async () => {
-    const result = await atService.sendMessageToMentionUsers(`hi!!!@${loginname2}`, topicId, user1._id);
+    const result = await atService.sendMessageToMentionUsers(`hi!!!@${loginname2}`, topicId, user1.loginname);
     assert(result[0].type === 'at');
     assert(result[0].topic_id === topicId);
-    assert(result[0].author_id === user1._id);
-    assert.equal(result[0].master_id.toString(), user2._id);
+    assert(result[0].author_id === user1.loginname);
+    assert.equal(result[0].master_id.toString(), user2.loginname);
     assert(result[0].reply_id === null);
   });
 

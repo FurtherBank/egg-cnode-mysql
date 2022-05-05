@@ -114,7 +114,7 @@ describe('test/app/controller/sign.test.js', () => {
       .get(`/reset_pass?name=${loginname}&key=${key}`);
     assert(res.statusCode === 200);
 
-    await ctx.model.User.findOneAndUpdate({ loginname }, { retrieve_time: '' }).exec();
+    await ctx.model.User.update({ retrieve_time: 0 }, { where: { loginname } });
     res = await app.httpRequest()
       .get(`/reset_pass?name=${loginname}&key=${key}`);
     assert(res.text.includes('该链接已过期，请重新申请。'));
@@ -237,7 +237,7 @@ describe('test/app/controller/sign.test.js', () => {
       .get('/passport/github');
 
     assert(res.statusCode === 302);
-    const patt = /https:\/\/github\.com\/login\/oauth\/authorize\?response_type=code\&redirect_uri=http%3A%2F%2F127\.0\.0\.1%3A(\d+)%2Fpassport%2Fgithub%2Fcallback&client_id=test/;
+    const patt = /https:\/\/github\.com\/login\/oauth\/authorize\?response_type=code\&redirect_uri=http%3A%2F%2F127\.0\.0\.1%3A(\d+)%2Fpassport%2Fgithub%2Fcallback&client_id=your_github_client_id/;
     assert(patt.test(res.headers.location));
   });
 

@@ -1,90 +1,128 @@
 'use strict';
-
 const utility = require('utility');
 
 module.exports = app => {
-  const mongoose = app.mongoose;
-  const Schema = mongoose.Schema;
+  const { DATE, INTEGER, STRING, BOOLEAN, UUID, UUIDV4, VIRTUAL } = app.Sequelize;
 
-  const UserSchema = new Schema({
-    name: { type: String },
-    loginname: { type: String },
-    pass: { type: String },
-    email: { type: String },
-    url: { type: String },
-    profile_image_url: { type: String },
-    location: { type: String },
-    signature: { type: String },
-    profile: { type: String },
-    weibo: { type: String },
-    avatar: { type: String },
-    githubId: { type: String },
-    githubUsername: { type: String },
-    githubAccessToken: { type: String },
-    is_block: { type: Boolean, default: false },
+  const User = app.model.define('User', {
+    name: { type: STRING(30) }, // 呢称
+    loginname: { type: STRING(30), primaryKey: true }, // 登录用户名，主键
+    pass: { type: STRING }, // 密码 hash
+    email: { type: STRING }, // 用户邮箱
+    url: { type: STRING }, // 用户主页 url
+    location: { type: STRING(30) }, // 所在地
+    signature: { type: STRING }, // 个性签名
+    weibo: { type: STRING }, // 微博信息
+    avatar: { type: STRING }, // 头像
+    githubId: { type: STRING(30) }, // 8 位数字
+    githubUsername: { type: STRING(30) },
+    is_block: { type: BOOLEAN, defaultValue: false },
 
-    score: { type: Number, default: 0 },
-    topic_count: { type: Number, default: 0 },
-    reply_count: { type: Number, default: 0 },
-    follower_count: { type: Number, default: 0 },
-    following_count: { type: Number, default: 0 },
-    collect_tag_count: { type: Number, default: 0 },
-    collect_topic_count: { type: Number, default: 0 },
-    create_at: { type: Date, default: Date.now },
-    update_at: { type: Date, default: Date.now },
-    is_star: { type: Boolean },
-    level: { type: String },
-    active: { type: Boolean, default: false },
+    score: { type: INTEGER, defaultValue: 0 },
+    topic_count: { type: INTEGER, defaultValue: 0 },
+    reply_count: { type: INTEGER, defaultValue: 0 },
+    is_star: { type: BOOLEAN, defaultValue: false }, // 是否明星用户
+    active: { type: BOOLEAN, defaultValue: false },
 
-    receive_reply_mail: { type: Boolean, default: false },
-    receive_at_mail: { type: Boolean, default: false },
-    from_wp: { type: Boolean },
+    retrieve_time: { type: DATE }, // 申请重新恢复密码的时间
+    retrieve_key: { type: UUID, defaultValue: UUIDV4 }, // 重新恢复密码申请的uuid
 
-    retrieve_time: { type: Number },
-    retrieve_key: { type: String },
+    accessToken: { type: UUID, defaultValue: UUIDV4 }, // 访问令牌，可以通过令牌调用api
 
-    accessToken: { type: String },
+    // viturals
+    avatar_url: {
+      type: VIRTUAL,
+      get() {
+        if (!this.loginname) {
+          return '';
+        }
+        const md5seed = this.email ? this.email.toLowerCase() : this.loginname.toLowerCase();
+        let url = this.avatar ||
+          'https://gravatar.com/avatar/' +
+            utility.md5(md5seed) +
+            '?size=48';
+
+        // www.gravatar.com 被墙
+        url = url.replace('www.gravatar.com', 'gravatar.com');
+
+        // 让协议自适应 protocol，使用 `//` 开头
+        if (url.indexOf('http:') === 0) {
+          url = url.slice(5);
+        }
+
+        // 如果是 github 的头像，则限制大小
+        if (url.indexOf('githubusercontent') !== -1) {
+          url += '&s=120';
+        }
+        return url;
+      },
+    },
+    isAdvanced: {
+      type: VIRTUAL,
+      get() {
+        return this.score > 700 || this.is_star;
+      },
+    },
+  }, {
+    // 从这里开始定义索引
+    indexes: [
+      {
+        fields: [
+          'loginname',
+        ],
+        unique: true,
+      },
+      {
+        fields: [
+          'email',
+        ],
+        unique: true,
+      },
+      {
+        fields: [
+          'score',
+        ],
+      },
+      {
+        fields: [
+          'github_id',
+        ],
+      },
+      {
+        fields: [
+          'access_token',
+        ],
+      },
+    ],
   });
 
-  UserSchema.index({ loginname: 1 }, { unique: true });
-  UserSchema.index({ email: 1 }, { unique: true });
-  UserSchema.index({ score: -1 });
-  UserSchema.index({ githubId: 1 });
-  UserSchema.index({ accessToken: 1 });
+  User.associate = function() {
+    app.model.User.hasMany(app.model.Topic, {
+      foreignKey: 'author_id',
+    });
+    app.model.User.belongsToMany(app.model.Topic, {
+      as: 'collectedTopics',
+      foreignKey: 'author_id',
+      through: app.model.TopicCollect,
+    });
+    app.model.User.hasMany(app.model.Reply, {
+      foreignKey: 'author_id',
+      onDelete: 'CASCADE',
+    });
+    app.model.User.belongsToMany(app.model.Reply, {
+      foreignKey: 'author_id',
+      as: 'upedReplies',
+      through: app.model.ReplyUp,
+    });
+    app.model.User.hasMany(app.model.Message, {
+      foreignKey: 'master_id',
+      as: 'messages',
+    });
+    app.model.User.hasMany(app.model.Message, {
+      foreignKey: 'author_id',
+      as: 'relatedMessages',
+    });
+  };
 
-  UserSchema.virtual('avatar_url').get(function() {
-    let url =
-      this.avatar ||
-      'https://gravatar.com/avatar/' +
-        utility.md5(this.email.toLowerCase()) +
-        '?size=48';
-
-    // www.gravatar.com 被墙
-    url = url.replace('www.gravatar.com', 'gravatar.com');
-
-    // 让协议自适应 protocol，使用 `//` 开头
-    if (url.indexOf('http:') === 0) {
-      url = url.slice(5);
-    }
-
-    // 如果是 github 的头像，则限制大小
-    if (url.indexOf('githubusercontent') !== -1) {
-      url += '&s=120';
-    }
-
-    return url;
-  });
-
-  UserSchema.virtual('isAdvanced').get(function() {
-    // 积分高于 700 则认为是高级用户
-    return this.score > 700 || this.is_star;
-  });
-
-  UserSchema.pre('save', function(next) {
-    const now = new Date();
-    this.update_at = now;
-    next();
-  });
-
-  return mongoose.model('User', UserSchema);
+  return User;
 };

@@ -4,7 +4,7 @@ const Controller = require('egg').Controller;
 const _ = require('lodash');
 const path = require('path');
 const fs = require('fs');
-const uuidv1 = require('uuid/v1');
+const uuidv1 = require('uuid').v1;
 const awaitWriteStream = require('await-stream-ready').write;
 const sendToWormhole = require('stream-wormhole');
 
@@ -14,22 +14,23 @@ class TopicController extends Controller {
    */
   async index() {
     function isUped(user, reply) {
-      if (!reply.ups) {
+      if (!reply.upers) {
         return false;
       }
-      return reply.ups.indexOf(user._id) !== -1;
+      return reply.upers.indexOf(user.loginname) !== -1;
     }
     const { ctx, service } = this;
     const topic_id = ctx.params.tid;
     const currentUser = ctx.user;
+    const s = ctx.app.Sequelize;
+    const { notIn } = s.Op;
+    // if (topic_id.length !== 24) {
+    //   ctx.status = 404;
+    //   ctx.message = '此话题不存在或已被删除。';
+    //   return;
+    // }
 
-    if (topic_id.length !== 24) {
-      ctx.status = 404;
-      ctx.message = '此话题不存在或已被删除。';
-      return;
-    }
-
-    const [ topic, author, replies ] = await service.topic.getFullTopic(topic_id);
+    const topic = await service.topic.getFullTopic(topic_id);
 
     if (!topic) {
       ctx.status = 404;
@@ -37,17 +38,13 @@ class TopicController extends Controller {
       return;
     }
 
-    // 增加 visit_count
-    topic.visit_count += 1;
-    // 写入 DB
+    // 数据库更新访问数
     await service.topic.incrementVisitCount(topic_id);
 
-    topic.author = author;
-    topic.replies = replies;
     // 点赞数排名第三的回答，它的点赞数就是阈值
     topic.reply_up_threshold = (() => {
-      let allUpCount = replies.map(reply => {
-        return (reply.ups && reply.ups.length) || 0;
+      let allUpCount = topic.replies.map(reply => {
+        return (reply.upers && reply.upers.length) || 0;
       });
       allUpCount = _.sortBy(allUpCount, Number).reverse();
 
@@ -58,15 +55,15 @@ class TopicController extends Controller {
       return threshold;
     })();
 
-    const options = { limit: 5, sort: '-last_reply_at' };
-    const query = { author_id: topic.author_id, _id: { $nin: [ topic._id ] } };
+    const options = { limit: 5, order: [[ 'last_reply_at', 'DESC' ]] };
+    const query = { author_id: topic.author_id, id: { [notIn]: [ topic.id ] } };
     const other_topics = await service.topic.getTopicsByQuery(query, options);
 
     // get no_reply_topics
     let no_reply_topics = await service.cache.get('no_reply_topics');
     if (!no_reply_topics) {
-      const query = { reply_count: 0, tab: { $nin: [ 'job', 'dev' ] } };
-      const options = { limit: 5, sort: '-create_at' };
+      const query = { reply_count: 0, tab: { [notIn]: [ 'job', 'dev' ] } };
+      const options = { limit: 5, order: [[ 'createdAt', 'DESC' ]] };
       no_reply_topics = await service.topic.getTopicsByQuery(query, options);
       await service.cache.setex('no_reply_topics', no_reply_topics, 60 * 1);
     }
@@ -75,10 +72,7 @@ class TopicController extends Controller {
     if (!currentUser) {
       is_collect = null;
     } else {
-      is_collect = await service.topicCollect.getTopicCollect(
-        currentUser._id,
-        topic_id
-      );
+      is_collect = await currentUser.hasCollectedTopic({ topic_id: topic.id });
     }
 
     await ctx.render('topic/index', {
@@ -134,7 +128,7 @@ class TopicController extends Controller {
       body.title,
       body.content,
       body.tab,
-      ctx.user._id
+      ctx.user.loginname
     );
 
     // 发帖用户增加积分,增加发表主题数量
@@ -143,11 +137,11 @@ class TopicController extends Controller {
     // 通知被@的用户
     await service.at.sendMessageToMentionUsers(
       body.content,
-      topic._id,
-      ctx.user._id
+      topic.id,
+      ctx.user.loginname
     );
 
-    ctx.redirect('/topic/' + topic._id);
+    ctx.redirect('/topic/' + topic.id.toString());
   }
 
   /**
@@ -166,12 +160,12 @@ class TopicController extends Controller {
     }
 
     if (
-      String(topic.author_id) === String(ctx.user._id) ||
+      String(topic.author_id) === String(ctx.user.loginname) ||
       ctx.user.is_admin
     ) {
       await ctx.render('topic/edit', {
         action: 'edit',
-        topic_id: topic._id,
+        topic_id: topic.id,
         title: topic.title,
         content: topic.content,
         tab: topic.tab,
@@ -200,7 +194,7 @@ class TopicController extends Controller {
     }
 
     if (
-      topic.author_id.toString() === ctx.user._id.toString() || ctx.user.is_admin
+      topic.author_id.toString() === ctx.user.loginname.toString() || ctx.user.is_admin
     ) {
       title = title.trim();
       tab = tab.trim();
@@ -223,7 +217,7 @@ class TopicController extends Controller {
         await ctx.render('topic/edit', {
           action: 'edit',
           edit_error: editError,
-          topic_id: topic._id,
+          topic_id: topic.id,
           content,
           tabs: config.tabs,
         });
@@ -234,17 +228,17 @@ class TopicController extends Controller {
       topic.title = title;
       topic.content = content;
       topic.tab = tab;
-      topic.update_at = new Date();
+      topic.updatedAt = new Date();
 
       await topic.save();
 
       await service.at.sendMessageToMentionUsers(
         content,
-        topic._id,
-        ctx.user._id
+        topic.id,
+        ctx.user.loginname
       );
 
-      ctx.redirect('/topic/' + topic._id);
+      ctx.redirect('/topic/' + topic.id);
     } else {
       ctx.status = 403;
       ctx.message = '对不起，你不能编辑此话题。';
@@ -257,11 +251,10 @@ class TopicController extends Controller {
   async delete() {
     // 删除话题, 话题作者topic_count减1
     // 删除回复，回复作者reply_count减1
-    // 删除topic_collect，用户collect_topic_count减1
     const { ctx, service } = this;
     const topic_id = ctx.params.tid;
 
-    const [ topic, author ] = await service.topic.getFullTopic(topic_id);
+    const topic = await service.topic.getFullTopic(topic_id);
 
     if (!topic) {
       ctx.status = 422;
@@ -271,16 +264,16 @@ class TopicController extends Controller {
 
     if (
       !ctx.user.is_admin &&
-      !topic.author_id.equals(ctx.user._id)
+      topic.author_id !== ctx.user.loginname
     ) {
       ctx.status = 403;
       ctx.body = { message: '无权限', success: false };
       return;
     }
 
-    author.score -= 5;
-    author.topic_count -= 1;
-    await author.save();
+    topic.author.score -= 5;
+    topic.author.topic_count -= 1;
+    await topic.author.save();
 
     topic.deleted = true;
 
@@ -365,8 +358,8 @@ class TopicController extends Controller {
     }
 
     const doc = await service.topicCollect.getTopicCollect(
-      ctx.user._id,
-      topic._id
+      ctx.user.loginname,
+      topic.id
     );
 
     if (doc) {
@@ -374,13 +367,8 @@ class TopicController extends Controller {
       return;
     }
 
-    await service.topicCollect.newAndSave(ctx.user._id, topic._id);
+    await ctx.user.addCollectedTopic(topic);
     ctx.body = { status: 'success' };
-
-    await Promise.all([
-      service.user.incrementCollectTopicCount(ctx.user._id),
-      service.topic.incrementCollectCount(topic_id),
-    ]);
   }
 
   /**
@@ -396,24 +384,20 @@ class TopicController extends Controller {
       return;
     }
 
-    const removeResult = await service.topicCollect.remove(
-      ctx.user._id,
-      topic._id
+    const removeNum = await service.topicCollect.remove(
+      ctx.user.loginname,
+      topic.id
     );
 
-    if (removeResult.result.n === 0) {
+    if (removeNum === 0) {
       ctx.body = { status: 'failed' };
       return;
     }
 
-    const user = await service.user.getUserById(ctx.user._id);
+    const user = await service.user.getUserByLoginName(ctx.user.loginname);
 
-    user.collect_topic_count -= 1;
     // ctx.user = user;
     await user.save();
-
-    topic.collect_count -= 1;
-    await topic.save();
 
     ctx.body = { status: 'success' };
   }
